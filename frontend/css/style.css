@@ -195,6 +195,30 @@ select option {
     font-weight: 500;
 }
 
+/* Mapping UI */
+.mapping-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.mapping-row label {
+    min-width: 160px;
+    font-weight: 600;
+}
+.mapping-row select {
+    flex: 1;
+    padding: 8px;
+}
+
+@media (max-width: 767px) {
+    .mapping-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .mapping-row label { min-width: auto; }
+}
+
 #sheetsContainer {
     background: #f1f5f9;
     padding: 15px;

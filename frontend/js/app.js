@@ -1,6 +1,18 @@
 const API_BASE = "http://127.0.0.1:8000";
 let detectedSheets = [];
 let selectedSheets = new Set();
+let workbookGlobal = null;
+
+const STANDARD_COLUMNS = [
+    "hbl_number",
+    "mbl_number",
+    "po_number",
+    "consignee",
+    "eta",
+    "vessel_name",
+    "voyage_no",
+    "clearance_status"
+];
 
 // --------------------
 // Detect Sheets from Excel
@@ -18,15 +30,17 @@ function detectSheets() {
     reader.onload = function(e) {
         try {
             const workbook = XLSX.read(e.target.result, { type: "array" });
+            workbookGlobal = workbook;
             detectedSheets = workbook.SheetNames;
             
-            // Clear and reset
+            // Clear selections - do NOT auto-select all sheets
             selectedSheets.clear();
-            detectedSheets.forEach(sheet => selectedSheets.add(sheet));
             
             renderMultiSelect();
             
             document.getElementById("sheetsContainer").style.display = "block";
+            // populate mapping sheet select and show mapping section
+            populateMappingSheetSelect();
         } catch (error) {
             alert("Error reading Excel file: " + error.message);
         }
@@ -115,6 +129,130 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 });
+
+    // --------------------
+    // Column Mapping UI
+    // --------------------
+    function populateMappingSheetSelect() {
+        const sel = document.getElementById("mappingSheetSelect");
+        sel.innerHTML = "";
+        detectedSheets.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s;
+            opt.textContent = s;
+            sel.appendChild(opt);
+        });
+        document.getElementById('mappingSection').style.display = 'block';
+        sel.onchange = () => loadMappingForSheet(sel.value);
+        // load first by default
+        if (detectedSheets.length > 0) loadMappingForSheet(detectedSheets[0]);
+    }
+
+    function getExcelColumnsForSheet(sheetName) {
+        if (!workbookGlobal) return [];
+        const ws = workbookGlobal.Sheets[sheetName];
+        if (!ws) return [];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const firstRow = rows && rows.length > 0 ? rows[0] : [];
+        return firstRow.map(c => String(c));
+    }
+
+    async function loadMappingForSheet(sheetName) {
+        const cols = getExcelColumnsForSheet(sheetName);
+        // fetch existing mapping from backend
+        const agentId = document.getElementById('agentId').value || '';
+        let existing = {};
+        if (agentId) {
+            try {
+                const res = await fetch(`${API_BASE}/mappings?agent_id=${agentId}&sheet_name=${encodeURIComponent(sheetName)}`);
+                if (res.ok) existing = await res.json();
+            } catch (e) {
+                console.error('Error fetching existing mapping', e);
+            }
+        }
+        renderMappingForm(cols, existing);
+    }
+
+    function renderMappingForm(excelColumns, existingMap) {
+        const container = document.getElementById('mappingFormContainer');
+        container.innerHTML = '';
+
+        STANDARD_COLUMNS.forEach(std => {
+            const row = document.createElement('div');
+            row.className = 'mapping-row';
+            const label = document.createElement('label');
+            label.textContent = `Shipment field: ${std}`;
+            const select = document.createElement('select');
+            select.dataset.std = std;
+            const noneOpt = document.createElement('option');
+            noneOpt.value = 'None';
+            noneOpt.textContent = 'None';
+            select.appendChild(noneOpt);
+
+            excelColumns.forEach(c => {
+                const o = document.createElement('option');
+                o.value = c;
+                o.textContent = c;
+                select.appendChild(o);
+            });
+
+            if (existingMap && existingMap[std]) {
+                const val = existingMap[std];
+                const match = Array.from(select.options).find(o => o.value === val);
+                if (match) match.selected = true;
+            }
+
+            row.appendChild(label);
+            row.appendChild(select);
+            container.appendChild(row);
+        });
+    }
+
+    async function saveMapping() {
+        const agentIdRaw = document.getElementById('agentId').value;
+        const sheet = document.getElementById('mappingSheetSelect').value;
+        const agentId = Number(agentIdRaw);
+        if (!agentIdRaw || !Number.isInteger(agentId) || agentId <= 0 || !sheet) {
+            alert('Agent ID (positive integer) and sheet are required');
+            return;
+        }
+        const selects = Array.from(document.querySelectorAll('#mappingFormContainer select'));
+        const mappings = {};
+        for (const s of selects) {
+            const std = s.dataset.std;
+            const val = s.value;
+            if (val && val !== 'None') mappings[std] = val;
+        }
+        // validations
+        if (!mappings.hbl_number) {
+            document.getElementById('mappingStatus').textContent = '❌ hbl_number mapping is required';
+            return;
+        }
+        const mappedCols = Object.values(mappings);
+        const unique = new Set(mappedCols);
+        if (mappedCols.length !== unique.size) {
+            document.getElementById('mappingStatus').textContent = '❌ Same Excel column mapped more than once';
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/mappings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agent_id: agentId, sheet_name: sheet, mappings })
+            });
+            if (!res.ok) {
+                const txt = await res.text();
+                document.getElementById('mappingStatus').textContent = `Error saving mappings: ${res.status} ${txt}`;
+                return;
+            }
+            const data = await res.json();
+            document.getElementById('mappingStatus').textContent = '✅ Column mapping saved successfully';
+        } catch (e) {
+            console.error(e);
+            document.getElementById('mappingStatus').textContent = `Error: ${e.message}`;
+        }
+    }
 
 // --------------------
 // Upload Excel
