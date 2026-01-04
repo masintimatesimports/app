@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shipment Management</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="container">
+    <h1>🚢 Sea Shipment Management</h1>
+
+    <!-- Agent -->
+    <section>
+        <label>Agent ID</label>
+        <input type="number" id="agentId" placeholder="Enter Agent ID">
+    </section>
+
+    <!-- Upload -->
+    <section>
+        <h2>📤 Upload Excel</h2>
+        <input type="file" id="excelFile" accept=".xlsx" onchange="detectSheets()">
+        <div id="sheetsContainer" style="display: none;">
+            <label>Select Sheets to Upload:</label>
+            <div id="customMultiSelect" class="custom-multi-select">
+                <div id="selectedTags" class="selected-tags"></div>
+                <input type="text" id="selectSearch" class="select-search" placeholder="Search or click to select sheets...">
+                <div id="selectDropdown" class="select-dropdown" style="display: none;"></div>
+            </div>
+        </div>
+        <button onclick="uploadExcel()">Upload</button>
+        <p id="uploadStatus"></p>
+    </section>
+
+    <!-- Track -->
+    <section>
+        <h2>🔎 Track Shipment</h2>
+        <input type="text" id="trackHbl" placeholder="Enter HBL">
+        <button onclick="trackShipment()">Track</button>
+        <div id="trackResult"></div>
+    </section>
+
+    <!-- Update Status -->
+    <section>
+        <h2>📝 Update Clearance Status</h2>
+        <input type="text" id="statusHbl" placeholder="HBL Number">
+        <input type="text" id="newStatus" placeholder="New Status">
+        <button onclick="updateStatus()">Update</button>
+        <p id="statusResult"></p>
+    </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@latest/dist/xlsx.full.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
