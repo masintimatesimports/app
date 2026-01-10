@@ -6,20 +6,23 @@ import os
 app = FastAPI(title="Shipment Backend", version="1.0.0")
 
 # CORS Configuration
-# Allow both localhost for development and your Render frontend
+# Replace the CORS section with:
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:5500",  # For local testing
+    "http://127.0.0.1:5500",
+    "https://shipment-frontend.vercel.app",  # We'll update this after Vercel deployment
+    "*.vercel.app",  # Allow all Vercel preview deployments
 ]
 
-# Add Render frontend URL dynamically
-frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
-    allowed_origins.append(frontend_url)
+
+
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=["*"],  # Allow ALL origins for now
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

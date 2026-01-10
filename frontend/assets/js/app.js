@@ -1,12 +1,12 @@
-// Production vs Development detection
-const isLocalhost = window.location.hostname === 'localhost' || 
-                    window.location.hostname === '127.0.0.1';
+// Replace the entire API_BASE section with:
+const API_BASE = window.location.hostname === 'localhost' || 
+                 window.location.hostname === '127.0.0.1'
+    ? "http://127.0.0.1:8000"
+    : "https://your-backend-service-name.up.railway.app";  // We'll get this after deployment
 
-const API_BASE = isLocalhost 
-    ? "http://127.0.0.1:8000" 
-    : "https://shipment-backend.onrender.com";  // Your Render backend URL
+console.log("Running in:", window.location.hostname);
+console.log("API Base:", API_BASE);
 
-console.log("API Base URL:", API_BASE);
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();

@@ -9,4 +9,6 @@ python-jose
 passlib[bcrypt]
 pip-system-certs
 gunicorn
+python-dateutil
+certifi
 
