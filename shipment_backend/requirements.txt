@@ -8,4 +8,5 @@ supabase
 python-jose
 passlib[bcrypt]
 pip-system-certs
+gunicorn
 

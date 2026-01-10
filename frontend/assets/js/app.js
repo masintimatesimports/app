@@ -1,5 +1,8 @@
-const API_BASE = "http://127.0.0.1:8000";
-
+// Replace the first line with:
+const API_BASE = window.location.origin.includes('localhost') 
+    ? "http://127.0.0.1:8000" 
+    : window.location.origin.replace('frontend', 'backend');
+// This will automatically detect if on localhost or production
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();
