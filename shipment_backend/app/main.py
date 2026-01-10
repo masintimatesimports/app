@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import uploads, shipments, column_mappings
+from app.api import uploads, shipments, column_mappings, shipment_fields, agents  # Add agents here
 
 app = FastAPI(title="Shipment Backend")
 
@@ -15,3 +15,5 @@ app.add_middleware(
 app.include_router(uploads.router)
 app.include_router(shipments.router)
 app.include_router(column_mappings.router)
+app.include_router(shipment_fields.router)
+app.include_router(agents.router)  # Add this line
