@@ -1,8 +1,12 @@
-// Replace the first line with:
-const API_BASE = window.location.origin.includes('localhost') 
+// Production vs Development detection
+const isLocalhost = window.location.hostname === 'localhost' || 
+                    window.location.hostname === '127.0.0.1';
+
+const API_BASE = isLocalhost 
     ? "http://127.0.0.1:8000" 
-    : window.location.origin.replace('frontend', 'backend');
-// This will automatically detect if on localhost or production
+    : "https://shipment-backend.onrender.com";  // Your Render backend URL
+
+console.log("API Base URL:", API_BASE);
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     setupNavigation();

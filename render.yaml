@@ -3,8 +3,8 @@ services:
   - type: web
     name: shipment-backend
     runtime: python
-    repo: https://github.com/yourusername/shipment-portal
-    region: singapore  # or singapore, frankfurt, ohio
+    repo: masintimatesimports/app  # ← FIXED: Just username/repo
+    region: singapore
     plan: free
     buildCommand: |
       pip install -r shipment_backend/requirements.txt
@@ -17,12 +17,14 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: FRONTEND_URL
+        sync: false
     healthCheckPath: /health
 
   # Frontend Static Site
   - type: static
     name: shipment-frontend
-    repo: https://github.com/yourusername/shipment-portal
+    repo: masintimatesimports/app  # ← FIXED: Just username/repo
     region: singapore
     plan: free
     buildCommand: |
