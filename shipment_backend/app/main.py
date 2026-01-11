@@ -12,11 +12,9 @@ allowed_origins = [
     "http://127.0.0.1:3000",
     "http://localhost:5500",  # For local testing
     "http://127.0.0.1:5500",
-    "https://shipment-frontend.vercel.app",  # We'll update this after Vercel deployment
+    "https://shiptrackmas.vercel.app/",  # We'll update this after Vercel deployment
     "*.vercel.app",  # Allow all Vercel preview deployments
 ]
-
-
 
 
 
