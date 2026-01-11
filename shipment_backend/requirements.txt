@@ -11,4 +11,8 @@ pip-system-certs
 gunicorn
 python-dateutil
 certifi
-
+python-jose[cryptography]
+passlib[bcrypt]
+gunicorn
+python-dateutil
+certifi
