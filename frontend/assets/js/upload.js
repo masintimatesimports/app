@@ -49,7 +49,7 @@ function detectSheets(file) {
             renderSheetsList();
             document.getElementById('sheetsSection').style.display = 'block';
         } catch (error) {
-            showNotification('Error reading Excel file: ' + error.message, 'error');
+            Api.showNotification('Error reading Excel file: ' + error.message, 'error');
         }
     };
     reader.readAsArrayBuffer(file);
@@ -78,21 +78,20 @@ function toggleSheet(sheet) {
 }
 
 async function uploadExcel() {
-    const agentId = document.getElementById('agentId').value;
+    const agentId = Api.getAgentId();
     const fileInput = document.getElementById('excelFile');
     
     if (!agentId) {
-        showNotification('Please enter Agent ID first', 'error');
-        return;
+        return; // Api.getAgentId() already shows notification
     }
     
     if (!fileInput || !fileInput.files[0]) {
-        showNotification('Please select an Excel file', 'error');
+        Api.showNotification('Please select an Excel file', 'error');
         return;
     }
     
     if (selectedSheets.size === 0) {
-        showNotification('Please select at least one sheet', 'error');
+        Api.showNotification('Please select at least one sheet', 'error');
         return;
     }
     
@@ -101,25 +100,32 @@ async function uploadExcel() {
     formData.append("agent_id", agentId);
     formData.append("sheets", Array.from(selectedSheets).join(","));
 
-    document.getElementById("uploadStatus").innerHTML = "Uploading...";
+    const uploadStatus = document.getElementById("uploadStatus");
+    if (uploadStatus) {
+        uploadStatus.innerHTML = '<div style="text-align:center;"><i class="fas fa-spinner fa-spin"></i> Uploading...</div>';
+    }
 
     try {
-        const res = await fetch("http://127.0.0.1:8000/uploads/excel", {
-            method: "POST",
-            body: formData
-        });
-
-        const data = await res.json();
-        document.getElementById("uploadStatus").innerHTML = 
-            `✅ Processed ${data.rows_processed || 0} rows`;
+        const data = await Api.uploads.excel(formData);
+        
+        if (uploadStatus) {
+            uploadStatus.innerHTML = `✅ Processed ${data.rows_processed || 0} rows`;
             
-        if (data.errors && data.errors.length > 0) {
-            document.getElementById("uploadStatus").innerHTML += 
-                `<br><small>With ${data.errors.length} errors</small>`;
+            if (data.errors && data.errors.length > 0) {
+                uploadStatus.innerHTML += `<br><small>With ${data.errors.length} errors</small>`;
+            }
         }
+        
+        // Refresh dashboard stats if on dashboard
+        if (typeof loadDashboardStats === 'function') {
+            setTimeout(loadDashboardStats, 1000);
+        }
+        
     } catch (error) {
-        document.getElementById("uploadStatus").innerHTML = 
-            `❌ Error: ${error.message}`;
+        console.error('Upload error:', error);
+        if (uploadStatus) {
+            uploadStatus.innerHTML = `❌ Error: ${error.message}`;
+        }
     }
 }
 

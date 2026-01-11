@@ -47,12 +47,14 @@
         </main>
     </div>
 
-    <!-- Load XLSX library -->
+    <!-- Inside your index.html, update the scripts section -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@latest/dist/xlsx.full.min.js"></script>
-    
-    <!-- Load all JS files in order -->
-    <script src="assets/js/agents.js"></script> <!-- MOVE THIS UP -->
+
+    <!-- Load OUR scripts in correct order -->
+    <script src="assets/js/config.js"></script>
+    <script src="assets/js/api.js"></script>
     <script src="assets/js/app.js"></script>
+    <script src="assets/js/agents.js"></script>
     <script src="assets/js/dashboard.js"></script>
     <script src="assets/js/upload.js"></script>
     <script src="assets/js/tracking.js"></script>

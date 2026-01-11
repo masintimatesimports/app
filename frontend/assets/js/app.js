@@ -1,14 +1,9 @@
-// Replace the entire API_BASE section with:
-const API_BASE = window.location.hostname === 'localhost' || 
-                 window.location.hostname === '127.0.0.1'
-    ? "http://127.0.0.1:8000"
-    : "https://your-backend-service-name.up.railway.app";  // We'll get this after deployment
-
-console.log("Running in:", window.location.hostname);
-console.log("API Base:", API_BASE);
+// frontend/assets/js/app.js
+console.log('App initializing...');
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, starting app...');
     setupNavigation();
     loadDashboard();
 });
@@ -46,48 +41,37 @@ function navigateTo(page) {
         case 'tracking': loadTracking(); break;
         case 'fields': loadFields(); break;
         case 'agents': 
-    if (typeof loadAgents === 'function') {
-        loadAgents();
-    } else {
-        console.error('loadAgents function not found');
-        document.getElementById('content-area').innerHTML = 'Error loading agents page';
-    }
-    break;
+            if (typeof loadAgents === 'function') {
+                loadAgents();
+            } else {
+                console.error('loadAgents function not found');
+                document.getElementById('content-area').innerHTML = 'Error loading agents page';
+            }
+            break;
         default: loadDashboard();
     }
 }
 
-// API helper
+// Legacy API helper (for backward compatibility)
 async function apiCall(endpoint, options = {}) {
     const agentId = document.getElementById('agentId').value;
     if (!agentId) {
-        alert('Please enter Agent ID first');
+        Api.showNotification('Please enter Agent ID first', 'error');
         return null;
     }
 
-    const url = `${API_BASE}${endpoint}${endpoint.includes('?') ? '&' : '?'}agent_id=${agentId}`;
+    const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}agent_id=${agentId}`;
     
     try {
-        const response = await fetch(url, {
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers
-            },
-            ...options
-        });
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        return await Api.fetchJson(url, options);
     } catch (error) {
         console.error('API Error:', error);
-        showNotification(error.message, 'error');
         return null;
     }
 }
 
 // Notification system
 function showNotification(message, type = 'info') {
-    // Simple notification - you can improve this later
     const div = document.createElement('div');
     div.innerHTML = `<div style="position:fixed; top:20px; right:20px; padding:15px; background:${type === 'error' ? '#fee' : '#efe'}; border:1px solid #ccc; border-radius:5px; z-index:1000;">
         ${message} <button onclick="this.parentElement.remove()" style="margin-left:10px;">×</button>
@@ -101,6 +85,8 @@ function showNotification(message, type = 'info') {
 }
 
 // Make functions globally available
-window.apiCall = apiCall;
+window.apiCall = apiCall; // For backward compatibility
 window.showNotification = showNotification;
 window.navigateTo = navigateTo;
+
+console.log('App initialized successfully');

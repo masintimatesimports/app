@@ -22,9 +22,8 @@ def _sanitize_mappings(raw: Dict[str, str]):
         s = str(v).strip()
         if s == "" or s.lower() == "none":
             continue
-        clean[k] = s
+        clean[k.strip()] = s
     return clean
-
 
 @router.post("/")
 def save_mapping(payload: MappingPayload):
@@ -35,7 +34,7 @@ def save_mapping(payload: MappingPayload):
     if not mappings:
         raise HTTPException(status_code=422, detail="No mappings provided after sanitization")
     
-    # Validate: No duplicate Excel columns in the new mappings
+    # Validate: No duplicate Excel columns in the NEW mappings
     excel_columns = list(mappings.values())
     if len(excel_columns) != len(set(excel_columns)):
         raise HTTPException(
@@ -51,7 +50,7 @@ def save_mapping(payload: MappingPayload):
         )
 
     try:
-        # Check for existing mappings that might conflict
+        # Get ALL existing mappings for this agent+sheet
         existing_res = supabase.table("column_mappings") \
             .select("*") \
             .eq("agent_id", agent_id) \
@@ -61,130 +60,55 @@ def save_mapping(payload: MappingPayload):
         
         existing_mappings = existing_res.data or []
         
-        # Identify conflicts: Excel columns already mapped to different standard fields
-        conflicts = []
-        for existing in existing_mappings:
-            excel_col = existing["excel_column_name"]
-            std_col = existing["standard_column_name"]
-            
-            # If this Excel column is in new mappings but to a DIFFERENT standard field
-            if excel_col in excel_columns and mappings.get(std_col) != excel_col:
-                conflicts.append(f"'{excel_col}' currently maps to '{std_col}'")
+        # Create lookup dictionaries
+        existing_std_to_excel = {item["standard_column_name"]: item["excel_column_name"] 
+                                for item in existing_mappings}
+        existing_excel_to_std = {item["excel_column_name"]: item["standard_column_name"] 
+                                for item in existing_mappings}
         
-        if conflicts:
-            error_msg = "Cannot save mappings due to conflicts:\n" + "\n".join(conflicts)
-            raise HTTPException(status_code=409, detail=error_msg)
-        
-        # delete all previous mappings for this agent+sheet (they're being replaced)
-        supabase.table("column_mappings") \
-            .delete() \
-            .eq("agent_id", agent_id) \
-            .eq("sheet_name", sheet_name) \
-            .execute()
-
-        now = datetime.now().isoformat()
-        rows = [{
-            "agent_id": agent_id,
-            "sheet_name": sheet_name,
-            "standard_column_name": std,
-            "excel_column_name": excel,
-            "active": True,
-            "created_at": now,
-            "updated_at": now
-        } for std, excel in mappings.items()]
-
-        if rows:
-            res = supabase.table("column_mappings").insert(rows).execute()
-            # check for errors in supabase response if available
-            if hasattr(res, 'error') and res.error:
-                logging.error("Supabase insert error: %s", res.error)
-                # Extract meaningful error message
-                error_detail = str(res.error)
-                if "duplicate key" in error_detail.lower():
-                    raise HTTPException(
-                        status_code=409, 
-                        detail="Duplicate Excel column mapping. Each Excel column can only map to one standard field."
-                    )
-                else:
-                    raise Exception(res.error)
-
-        return {"saved": True, "message": f"Mappings saved for sheet '{sheet_name}'"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Error saving mappings")
-        # Return more specific error message
-        error_msg = str(e)
-        if "duplicate key" in error_msg.lower():
-            raise HTTPException(
-                status_code=409, 
-                detail="Duplicate Excel column mapping detected. Please ensure each Excel column maps to only one standard field."
-            )
-        raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
-    
-@router.get("/")
-def get_mappings(agent_id: int, sheet_name: str):
-    res = supabase.table("column_mappings") \
-        .select("*") \
-        .eq("agent_id", agent_id) \
-        .eq("sheet_name", sheet_name) \
-        .eq("active", True) \
-        .execute()
-
-    data = res.data or []
-    # return as dict: standard_column_name -> excel_column_name
-    return {item["standard_column_name"]: item["excel_column_name"] for item in data}
-
-
-@router.get("/")
-def get_mappings(agent_id: int, sheet_name: str):
-    res = supabase.table("column_mappings") \
-        .select("*") \
-        .eq("agent_id", agent_id) \
-        .eq("sheet_name", sheet_name) \
-        .eq("active", True) \
-        .execute()
-    return res.data or []
-
-@router.post("/")
-def save_mapping(payload: MappingPayload):
-    agent_id = int(payload.agent_id)
-    sheet_name = payload.sheet_name
-    mappings = _sanitize_mappings(payload.mappings)
-
-    if not mappings:
-        raise HTTPException(status_code=422, detail="No mappings provided")
-    
-    if "hbl_number" not in mappings:
-        raise HTTPException(status_code=422, detail="hbl_number mapping is required")
-
-    try:
-        # CRUD Approach: Update existing or insert new
         now = datetime.now().isoformat()
         
         for std_col, excel_col in mappings.items():
-            # Check if mapping already exists
-            existing = supabase.table("column_mappings") \
-                .select("*") \
-                .eq("agent_id", agent_id) \
-                .eq("sheet_name", sheet_name) \
-                .eq("standard_column_name", std_col) \
-                .eq("active", True) \
-                .execute()
+            # Check if this Excel column is already mapped to a DIFFERENT standard column
+            if excel_col in existing_excel_to_std:
+                existing_std_for_this_excel = existing_excel_to_std[excel_col]
+                if existing_std_for_this_excel != std_col:
+                    # CONFLICT: Excel column already mapped to different standard column
+                    # We need to either:
+                    # 1. Update the existing mapping to point to new standard column, OR
+                    # 2. Delete the existing mapping first
+                    
+                    # Option 1: Update existing mapping (change its standard column)
+                    # But this violates the constraint! Can't have same Excel column for different standards
+                    
+                    # Option 2: Delete the old mapping first (soft delete)
+                    supabase.table("column_mappings") \
+                        .update({"active": False}) \
+                        .eq("agent_id", agent_id) \
+                        .eq("sheet_name", sheet_name) \
+                        .eq("excel_column_name", excel_col) \
+                        .execute()
+                    
+                    # Now we can insert the new mapping
             
-            if existing.data:
-                # UPDATE existing mapping
-                supabase.table("column_mappings") \
-                    .update({
-                        "excel_column_name": excel_col,
-                        "updated_at": now
-                    }) \
-                    .eq("agent_id", agent_id) \
-                    .eq("sheet_name", sheet_name) \
-                    .eq("standard_column_name", std_col) \
-                    .execute()
+            # Check if this standard column already has a mapping (maybe to different Excel column)
+            if std_col in existing_std_to_excel:
+                existing_excel_for_this_std = existing_std_to_excel[std_col]
+                if existing_excel_for_this_std != excel_col:
+                    # Update the existing mapping with new Excel column
+                    supabase.table("column_mappings") \
+                        .update({
+                            "excel_column_name": excel_col,
+                            "updated_at": now
+                        }) \
+                        .eq("agent_id", agent_id) \
+                        .eq("sheet_name", sheet_name) \
+                        .eq("standard_column_name", std_col) \
+                        .eq("active", True) \
+                        .execute()
+                # else: same mapping exists, do nothing
             else:
-                # INSERT new mapping
+                # Insert new mapping
                 supabase.table("column_mappings") \
                     .insert({
                         "agent_id": agent_id,
@@ -200,10 +124,38 @@ def save_mapping(payload: MappingPayload):
         return {"saved": True, "message": "Mappings updated successfully"}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.exception("Error saving mappings")
+        error_msg = str(e)
+        if "duplicate key" in error_msg.lower():
+            raise HTTPException(
+                status_code=409, 
+                detail="Duplicate Excel column mapping detected. Database constraint violation. Please try clearing existing mappings first."
+            )
+        raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
+    
+
+@router.get("/")
+def get_mappings(agent_id: int, sheet_name: str):
+    """
+    Get mappings for a specific agent and sheet
+    """
+    res = supabase.table("column_mappings") \
+        .select("*") \
+        .eq("agent_id", agent_id) \
+        .eq("sheet_name", sheet_name) \
+        .eq("active", True) \
+        .execute()
+
+    data = res.data or []
+    # return as dict: standard_column_name -> excel_column_name
+    return {item["standard_column_name"]: item["excel_column_name"] for item in data}
+
 
 @router.delete("/{agent_id}/{sheet_name}/{standard_column}")
-def delete_mapping(agent_id: int, sheet_name: str, standard_column: str):
+def delete_single_mapping(agent_id: int, sheet_name: str, standard_column: str):
+    """
+    Delete a single mapping for a specific standard column
+    """
     try:
         supabase.table("column_mappings") \
             .update({"active": False}) \
@@ -214,23 +166,31 @@ def delete_mapping(agent_id: int, sheet_name: str, standard_column: str):
         return {"deleted": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+# In delete_all_mappings_for_sheet function:
+@router.delete("/{agent_id}/{sheet_name}")
+def delete_all_mappings_for_sheet(agent_id: int, sheet_name: str):
+    try:
+        # HARD DELETE instead of soft delete
+        supabase.table("column_mappings") \
+            .delete() \
+            .eq("agent_id", agent_id) \
+            .eq("sheet_name", sheet_name) \
+            .execute()
+        
+        return {"deleted": True, "message": f"All mappings permanently deleted for sheet '{sheet_name}'"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/all")
 def get_all_mappings_for_agent(agent_id: int):
+    """
+    Get all mappings for an agent (all sheets)
+    """
     res = supabase.table("column_mappings") \
         .select("*") \
         .eq("agent_id", agent_id) \
         .eq("active", True) \
         .execute()
-    return res.data or []   
-
-def _sanitize_mappings(raw: Dict[str, str]):
-    clean = {}
-    for k, v in (raw or {}).items():
-        if v is None:
-            continue
-        s = str(v).strip()  # ADD THIS: Trim whitespace
-        if s == "" or s.lower() == "none":
-            continue
-        clean[k.strip()] = s  # Also trim the key
-    return clean 
+    return res.data or []

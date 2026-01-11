@@ -1,4 +1,7 @@
-function loadMapping() {
+let workbook = null;
+let currentSheet = '';
+
+async function loadMapping() {
     document.getElementById('content-area').innerHTML = `
         <div class="upload-container">
             <h2><i class="fas fa-columns"></i> Column Mapping</h2>
@@ -6,7 +9,7 @@ function loadMapping() {
             
             <div class="input-group">
                 <label>Agent ID</label>
-                <input type="number" id="mapAgentId" placeholder="Agent ID" value="1" onchange="loadAllSheets()">
+                <input type="number" id="mapAgentId" placeholder="Agent ID" value="${Api.getAgentId() || ''}" onchange="loadAllSheets()">
             </div>
             
             <!-- Section 1: View/Edit Existing Mappings -->
@@ -44,9 +47,6 @@ function loadMapping() {
         </div>
     `;
     
-    // Load existing sheets and mappings
-    loadAllSheets();
-    
     // Setup file input
     const fileInput = document.getElementById('mappingFile');
     if (fileInput) {
@@ -56,32 +56,35 @@ function loadMapping() {
             }
         });
     }
+    
+    // Load existing sheets and mappings
+    await loadAllSheets();
 }
-
-let workbook = null;
-let currentSheet = '';
 
 // Load all sheets that have mappings for this agent
 async function loadAllSheets() {
-    const agentId = document.getElementById('mapAgentId').value;
-    if (!agentId) return;
+    const agentIdInput = document.getElementById('mapAgentId');
+    const agentId = agentIdInput ? agentIdInput.value : null;
+    
+    if (!agentId) {
+        document.getElementById('allMappingsList').innerHTML = 
+            '<p style="color:#64748b; text-align:center;">Enter Agent ID to view mappings</p>';
+        return;
+    }
     
     try {
-        const response = await fetch(`http://127.0.0.1:8000/mappings/all?agent_id=${agentId}`);
-        let mappingsData = [];
-        
-        if (response.ok) {
-            mappingsData = await response.json();
-        }
+        const mappingsData = await Api.mappings.getAll(parseInt(agentId));
         
         // Group by sheet_name
         const sheets = {};
-        mappingsData.forEach(mapping => {
-            if (!sheets[mapping.sheet_name]) {
-                sheets[mapping.sheet_name] = [];
-            }
-            sheets[mapping.sheet_name].push(mapping);
-        });
+        if (Array.isArray(mappingsData)) {
+            mappingsData.forEach(mapping => {
+                if (!sheets[mapping.sheet_name]) {
+                    sheets[mapping.sheet_name] = [];
+                }
+                sheets[mapping.sheet_name].push(mapping);
+            });
+        }
         
         // Display all existing mappings
         let html = '';
@@ -92,10 +95,10 @@ async function loadAllSheets() {
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                             <h4 style="margin:0;"><i class="fas fa-table"></i> ${sheetName}</h4>
                             <div>
-                                <button class="btn-secondary" onclick="editSheet('${sheetName}')" style="margin-right:5px;">
+                                <button class="btn-secondary" onclick="editSheet('${sheetName.replace(/'/g, "\\'")}')" style="margin-right:5px;">
                                     <i class="fas fa-edit"></i> Edit
                                 </button>
-                                <button class="btn-icon" onclick="deleteAllMappings('${sheetName}')" style="color:var(--danger);">
+                                <button class="btn-icon" onclick="deleteAllMappings('${sheetName.replace(/'/g, "\\'")}')" style="color:var(--danger);">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -141,7 +144,9 @@ async function loadAllSheets() {
     } catch (error) {
         console.error('Error loading all sheets:', error);
         document.getElementById('allMappingsList').innerHTML = 
-            '<p style="color:var(--danger);">Error loading mappings: ' + error.message + '</p>';
+            `<div style="color:var(--danger); padding:20px; text-align:center;">
+                Error loading mappings: ${error.message}
+            </div>`;
     }
 }
 
@@ -149,25 +154,29 @@ async function loadAllSheets() {
 function handleFileUpload(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
-        workbook = XLSX.read(e.target.result, { type: 'array' });
-        const sheetNames = workbook.SheetNames;
-        
-        const sheetSelect = document.getElementById('sheetSelect');
-        
-        // Add new sheet names to dropdown
-        sheetNames.forEach(sheetName => {
-            if (!Array.from(sheetSelect.options).some(o => o.value === sheetName)) {
-                const option = document.createElement('option');
-                option.value = sheetName;
-                option.textContent = sheetName;
-                sheetSelect.appendChild(option);
+        try {
+            workbook = XLSX.read(e.target.result, { type: 'array' });
+            const sheetNames = workbook.SheetNames;
+            
+            const sheetSelect = document.getElementById('sheetSelect');
+            
+            // Add new sheet names to dropdown
+            sheetNames.forEach(sheetName => {
+                if (!Array.from(sheetSelect.options).some(o => o.value === sheetName)) {
+                    const option = document.createElement('option');
+                    option.value = sheetName;
+                    option.textContent = sheetName;
+                    sheetSelect.appendChild(option);
+                }
+            });
+            
+            // Auto-select first sheet
+            if (sheetNames.length > 0 && !sheetSelect.value) {
+                sheetSelect.value = sheetNames[0];
+                loadSheetForMapping();
             }
-        });
-        
-        // Auto-select first sheet
-        if (sheetNames.length > 0 && !sheetSelect.value) {
-            sheetSelect.value = sheetNames[0];
-            loadSheetForMapping();
+        } catch (error) {
+            Api.showNotification('Error reading Excel file: ' + error.message, 'error');
         }
     };
     reader.readAsArrayBuffer(file);
@@ -175,8 +184,10 @@ function handleFileUpload(file) {
 
 // Load sheet for mapping (with existing data) - FIXED with TRIM
 async function loadSheetForMapping() {
-    const agentId = document.getElementById('mapAgentId').value;
-    const sheetName = document.getElementById('sheetSelect').value;
+    const agentIdInput = document.getElementById('mapAgentId');
+    const agentId = agentIdInput ? agentIdInput.value : null;
+    const sheetSelect = document.getElementById('sheetSelect');
+    const sheetName = sheetSelect ? sheetSelect.value : '';
     
     if (!agentId || !sheetName) {
         document.getElementById('mappingFormContainer').style.display = 'none';
@@ -188,13 +199,15 @@ async function loadSheetForMapping() {
     
     try {
         // Load existing mappings for this sheet
-        const response = await fetch(
-            `http://127.0.0.1:8000/mappings/?agent_id=${agentId}&sheet_name=${encodeURIComponent(sheetName)}`
-        );
-        
         let existingMappings = {};
-        if (response.ok) {
-            existingMappings = await response.json();
+        try {
+            const mappings = await Api.mappings.getForSheet(parseInt(agentId), sheetName);
+            if (mappings && typeof mappings === 'object') {
+                existingMappings = mappings;
+            }
+        } catch (mappingError) {
+            console.log('No existing mappings found for this sheet:', mappingError.message);
+            // Continue with empty mappings
         }
         
         // Get Excel columns (if workbook loaded) - FIXED: TRIM columns
@@ -214,7 +227,7 @@ async function loadSheetForMapping() {
         
         // If no Excel columns from file, show empty options
         if (excelColumns.length === 0) {
-            excelColumns = [];
+            excelColumns = ['No columns detected - upload file first'];
         }
         
         // Render mapping form
@@ -224,7 +237,7 @@ async function loadSheetForMapping() {
         
     } catch (error) {
         console.error('Error loading sheet:', error);
-        alert('Error loading sheet: ' + error.message);
+        Api.showNotification('Error loading sheet: ' + error.message, 'error');
     }
 }
 
@@ -262,11 +275,12 @@ async function renderMappingForm(excelColumns, existingMappings) {
 
 // Save mapping - FIXED with TRIM
 async function saveMapping() {
-    const agentId = document.getElementById('mapAgentId').value;
+    const agentIdInput = document.getElementById('mapAgentId');
+    const agentId = agentIdInput ? parseInt(agentIdInput.value) : null;
     const sheetName = currentSheet;
     
     if (!agentId || !sheetName) {
-        alert('Please select Agent ID and Sheet');
+        Api.showNotification('Please select Agent ID and Sheet', 'error');
         return;
     }
     
@@ -276,13 +290,13 @@ async function saveMapping() {
     selects.forEach(select => {
         const fieldKey = String(select.dataset.field).trim(); // TRIM field key
         const excelCol = String(select.value).trim(); // TRIM Excel column
-        if (excelCol) {
+        if (excelCol && excelCol !== '-- Not Mapped --') {
             mappings[fieldKey] = excelCol;
         }
     });
     
     if (!mappings.hbl_number) {
-        alert('HBL Number mapping is REQUIRED');
+        Api.showNotification('HBL Number mapping is REQUIRED', 'error');
         return;
     }
     
@@ -290,76 +304,63 @@ async function saveMapping() {
     const excelColumns = Object.values(mappings);
     const uniqueColumns = new Set(excelColumns);
     if (excelColumns.length !== uniqueColumns.size) {
-        alert('❌ Error: Same Excel column mapped to multiple fields!');
+        Api.showNotification('❌ Error: Same Excel column mapped to multiple fields!', 'error');
         return;
     }
     
     try {
-        const response = await fetch('http://127.0.0.1:8000/mappings/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                agent_id: parseInt(agentId),
-                sheet_name: sheetName,
-                mappings: mappings
-            })
-        });
+        const result = await Api.mappings.save(agentId, sheetName, mappings);
         
-        const data = await response.json();
-        
-        if (response.ok) {
-            alert('✅ Mappings saved successfully!');
-            loadAllSheets(); // Refresh existing mappings list
-            loadSheetForMapping(); // Refresh current form
+        if (result && result.saved) {
+            Api.showNotification('✅ Mappings saved successfully!', 'success');
+            await loadAllSheets(); // Refresh existing mappings list
+            await loadSheetForMapping(); // Refresh current form
         } else {
-            alert(`❌ Error: ${data.detail || 'Unknown error'}`);
+            Api.showNotification(`❌ Error: ${result.detail || 'Unknown error'}`, 'error');
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
-function editSheet(sheetName) {
-    document.getElementById('sheetSelect').value = sheetName;
-    loadSheetForMapping();
+async function editSheet(sheetName) {
+    const sheetSelect = document.getElementById('sheetSelect');
+    if (sheetSelect) {
+        sheetSelect.value = sheetName;
+        await loadSheetForMapping();
+    }
     // Scroll to mapping form
-    document.getElementById('mappingFormContainer').scrollIntoView({ behavior: 'smooth' });
+    const formContainer = document.getElementById('mappingFormContainer');
+    if (formContainer) {
+        formContainer.scrollIntoView({ behavior: 'smooth' });
+    }
 }
 
 async function deleteAllMappings(sheetName) {
-    const agentId = document.getElementById('mapAgentId').value;
+    const agentIdInput = document.getElementById('mapAgentId');
+    const agentId = agentIdInput ? agentIdInput.value : null;
+    
+    if (!agentId) {
+        Api.showNotification('Please enter Agent ID first', 'error');
+        return;
+    }
     
     if (!confirm(`Delete ALL mappings for sheet "${sheetName}"?`)) return;
     
     try {
-        const response = await fetch(
-            `http://127.0.0.1:8000/mappings/?agent_id=${agentId}&sheet_name=${encodeURIComponent(sheetName)}`
-        );
-        
-        if (response.ok) {
-            const mappings = await response.json();
-            
-            // Delete each mapping
-            for (const [stdCol] of Object.entries(mappings)) {
-                await fetch(
-                    `http://127.0.0.1:8000/mappings/${agentId}/${encodeURIComponent(sheetName)}/${stdCol}`,
-                    { method: 'DELETE' }
-                );
-            }
-            
-            alert('All mappings deleted!');
-            loadAllSheets();
-        }
+        await Api.mappings.delete(parseInt(agentId), sheetName);
+        Api.showNotification('All mappings deleted!', 'success');
+        await loadAllSheets();
     } catch (error) {
-        alert('Error deleting mappings: ' + error.message);
+        Api.showNotification('Error deleting mappings: ' + error.message, 'error');
     }
 }
 
+
 async function getStandardFields() {
     try {
-        const response = await fetch('http://127.0.0.1:8000/fields');
-        if (response.ok) {
-            const fields = await response.json();
+        const fields = await Api.fields.getAll();
+        if (Array.isArray(fields) && fields.length > 0) {
             return fields.map(f => ({
                 key: String(f.field_key).trim(),
                 label: f.field_label,
@@ -367,9 +368,11 @@ async function getStandardFields() {
             }));
         }
     } catch (error) {
-        console.error('Failed to load fields:', error);
+        console.error('Failed to load fields from API:', error);
+        // Fallback to default fields
     }
     
+    // Default fields if API fails or returns empty
     return [
         { key: 'hbl_number', label: 'HBL Number', required: true },
         { key: 'mbl_number', label: 'MBL Number', required: false },
@@ -382,4 +385,11 @@ async function getStandardFields() {
     ];
 }
 
+// Make functions globally available
 window.loadMapping = loadMapping;
+window.handleFileUpload = handleFileUpload;
+window.loadSheetForMapping = loadSheetForMapping;
+window.saveMapping = saveMapping;
+window.editSheet = editSheet;
+window.deleteAllMappings = deleteAllMappings;
+window.loadAllSheets = loadAllSheets;

@@ -1,4 +1,4 @@
-function loadFields() {
+async function loadFields() {
     document.getElementById('content-area').innerHTML = `
         <div style="background:white; padding:30px; border-radius:10px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
@@ -13,14 +13,75 @@ function loadFields() {
             <div id="fieldsList" style="margin-top:20px;">
                 <div style="text-align:center; padding:40px; background:#f8fafc; border-radius:8px;">
                     <i class="fas fa-sliders-h fa-3x" style="color:#64748b;"></i>
-                    <h3>No custom fields yet</h3>
-                    <p>Add your first custom field to extend shipment data</p>
+                    <h3>Loading fields...</h3>
+                    <p><i class="fas fa-spinner fa-spin"></i> Please wait</p>
                 </div>
             </div>
         </div>
-        
-        <!-- Modal will be added dynamically -->
     `;
+    
+    await loadFieldsList();
+}
+
+async function loadFieldsList() {
+    try {
+        const fields = await Api.fields.getAll();
+        
+        const container = document.getElementById('fieldsList');
+        if (!container) return;
+        
+        if (!fields || fields.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:40px; background:#f8fafc; border-radius:8px;">
+                    <i class="fas fa-sliders-h fa-3x" style="color:#64748b;"></i>
+                    <h3>No custom fields yet</h3>
+                    <p>Add your first custom field to extend shipment data</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+        
+        fields.forEach(field => {
+            html += `
+                <div class="field-card">
+                    <div class="field-info">
+                        <h4>${field.field_label}</h4>
+                        <div class="field-meta">
+                            <span class="field-key">Key: ${field.field_key}</span>
+                            <span class="badge badge-type">${field.field_type}</span>
+                            ${field.required ? '<span class="badge badge-required">Required</span>' : ''}
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn-icon" onclick="editField(${field.field_id})" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon btn-danger" onclick="deleteField(${field.field_id})" title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        container.innerHTML = html;
+        
+    } catch (error) {
+        console.error('Error loading fields:', error);
+        const container = document.getElementById('fieldsList');
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align:center; padding:40px; background:#fee2e2; border-radius:8px; color:#dc2626;">
+                    <i class="fas fa-exclamation-circle fa-3x"></i>
+                    <h3>Error loading fields</h3>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        }
+    }
 }
 
 function showAddFieldModal() {
@@ -30,7 +91,7 @@ function showAddFieldModal() {
             <div style="background:white; border-radius:12px; width:90%; max-width:500px; max-height:90vh; overflow:auto;">
                 <div style="padding:20px; border-bottom:1px solid #e2e8f0; display:flex; justify-content:space-between; align-items:center;">
                     <h3 style="margin:0;">Add Custom Field</h3>
-                    <button onclick="this.closest('div[style*=\"position:fixed\"]').remove()" style="background:none; border:none; font-size:1.5em; cursor:pointer; color:#64748b;">×</button>
+                    <button onclick="closeModal()" style="background:none; border:none; font-size:1.5em; cursor:pointer; color:#64748b;">×</button>
                 </div>
                 <div style="padding:20px;">
                     <div style="margin-bottom:20px;">
@@ -57,13 +118,20 @@ function showAddFieldModal() {
                     </div>
                 </div>
                 <div style="padding:20px; border-top:1px solid #e2e8f0; display:flex; justify-content:flex-end; gap:10px;">
-                    <button class="btn-secondary" onclick="this.closest('div[style*=\"position:fixed\"]').remove()">Cancel</button>
+                    <button class="btn-secondary" onclick="closeModal()">Cancel</button>
                     <button class="btn-primary" onclick="createField()">Create Field</button>
                 </div>
             </div>
         </div>
     `;
-    document.body.appendChild(modal.firstChild);
+    document.body.appendChild(modal);
+}
+
+function closeModal() {
+    const modal = document.querySelector('div[style*="position:fixed"]');
+    if (modal) {
+        modal.remove();
+    }
 }
 
 async function createField() {
@@ -75,29 +143,35 @@ async function createField() {
     };
     
     if (!fieldData.field_key || !fieldData.field_label) {
-        showNotification('Key and Label are required', 'error');
+        Api.showNotification('Key and Label are required', 'error');
         return;
     }
     
     try {
-        const response = await fetch('http://127.0.0.1:8000/fields', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fieldData)
-        });
-        
-        if (response.ok) {
-            showNotification('Custom field created successfully', 'success');
-            // Close modal
-            document.querySelector('div[style*="position:fixed"]')?.remove();
-            // Reload fields list
-            loadFields();
-        } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create field');
-        }
+        await Api.fields.create(fieldData);
+        Api.showNotification('Custom field created successfully', 'success');
+        closeModal();
+        await loadFieldsList();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
+    }
+}
+
+async function editField(fieldId) {
+    Api.showNotification('Edit feature not implemented yet', 'info');
+}
+
+async function deleteField(fieldId) {
+    if (!confirm('Are you sure you want to delete this field?')) {
+        return;
+    }
+    
+    try {
+        await Api.fields.delete(fieldId);
+        Api.showNotification('Field deleted successfully', 'success');
+        await loadFieldsList();
+    } catch (error) {
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
@@ -105,3 +179,6 @@ async function createField() {
 window.loadFields = loadFields;
 window.showAddFieldModal = showAddFieldModal;
 window.createField = createField;
+window.editField = editField;
+window.deleteField = deleteField;
+window.closeModal = closeModal;

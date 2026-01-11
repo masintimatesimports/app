@@ -1,4 +1,4 @@
-function loadDashboard() {
+async function loadDashboard() {
     document.getElementById('content-area').innerHTML = `
         <div class="dashboard">
             <div class="stats-grid">
@@ -46,76 +46,54 @@ function loadDashboard() {
         </div>
     `;
     
-    loadDashboardStats();
+    await loadDashboardStats();
 }
 
-
 async function loadDashboardStats() {
-    const agentId = document.getElementById('agentId').value;
+    const agentId = Api.getAgentId();
+    if (!agentId) {
+        showPlaceholderData();
+        return;
+    }
     
     try {
-        // 1. Get total unique shipments count - NO AGENT FILTER
-        const totalRes = await fetch(`http://127.0.0.1:8000/shipments/total-count`);
-        if (totalRes.ok) {
-            const data = await totalRes.json();
-            document.getElementById('total-shipments').textContent = data.count || 0;
+        // 1. Get total unique shipments count
+        const totalData = await Api.shipments.getTotalCount();
+        document.getElementById('total-shipments').textContent = totalData.count || 0;
+        
+        // 2. Get pending updates count
+        const pendingData = await Api.shipments.getPendingCount();
+        document.getElementById('pending-updates').textContent = pendingData.count || 0;
+        
+        // 3. Get Excel files count
+        const filesData = await Api.uploads.getCount(agentId);
+        document.getElementById('excel-files').textContent = filesData.count || 0;
+        
+        // 4. Get last upload date
+        const uploadData = await Api.uploads.getLatest(agentId);
+        if (uploadData && uploadData.uploaded_at) {
+            const date = new Date(uploadData.uploaded_at);
+            document.getElementById('last-upload').textContent = 
+                `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
         } else {
-            console.error('Failed to get total count:', await totalRes.text());
-            document.getElementById('total-shipments').textContent = '--';
+            document.getElementById('last-upload').textContent = 'Never';
         }
         
-        // 2. Get pending updates - NO AGENT FILTER
-        const pendingRes = await fetch(`http://127.0.0.1:8000/shipments/pending-count`);
-        if (pendingRes.ok) {
-            const pendingData = await pendingRes.json();
-            document.getElementById('pending-updates').textContent = pendingData.count || 0;
-        } else {
-            document.getElementById('pending-updates').textContent = '--';
-        }
-        
-        // 3. Get Excel files count - STILL WITH AGENT FILTER
-        if (agentId) {
-            const filesRes = await fetch(`http://127.0.0.1:8000/uploads/count?agent_id=${agentId}`);
-            if (filesRes.ok) {
-                const filesData = await filesRes.json();
-                document.getElementById('excel-files').textContent = filesData.count || 0;
-            } else {
-                document.getElementById('excel-files').textContent = '--';
-            }
-        } else {
-            document.getElementById('excel-files').textContent = '--';
-        }
-        
-        // 4. Get last upload date - STILL WITH AGENT FILTER
-        if (agentId) {
-            const lastUploadRes = await fetch(`http://127.0.0.1:8000/uploads/latest?agent_id=${agentId}`);
-            if (lastUploadRes.ok) {
-                const uploadData = await lastUploadRes.json();
-                if (uploadData && uploadData.uploaded_at) {
-                    const date = new Date(uploadData.uploaded_at);
-                    document.getElementById('last-upload').textContent = 
-                        `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
-                } else {
-                    document.getElementById('last-upload').textContent = 'Never';
-                }
-            } else {
-                document.getElementById('last-upload').textContent = '--';
-            }
-        } else {
-            document.getElementById('last-upload').textContent = '--';
-        }
-        
-        // 5. Load recent shipments - WITH AGENT FILTER
-        if (agentId) {
-            await loadRecentShipments(agentId);
-        } else {
-            document.getElementById('recent-shipments').innerHTML = 
-                '<p style="color:#64748b; text-align:center;">Enter Agent ID to view recent shipments</p>';
-        }
+        // 5. Load recent shipments
+        await loadRecentShipments(agentId);
         
     } catch (error) {
         console.error('Dashboard error:', error);
         showPlaceholderData();
+        
+        // Still try to show recent shipments if agent ID is valid
+        if (agentId) {
+            try {
+                await loadRecentShipments(agentId);
+            } catch (shipmentsError) {
+                console.error('Recent shipments error:', shipmentsError);
+            }
+        }
     }
 }
 
@@ -124,19 +102,19 @@ function showPlaceholderData() {
     document.getElementById('pending-updates').textContent = '--';
     document.getElementById('excel-files').textContent = '--';
     document.getElementById('last-upload').textContent = '--';
+    
+    const container = document.getElementById('recent-shipments');
+    if (container) {
+        container.innerHTML = 
+            '<p style="color:#64748b; text-align:center;">Enter Agent ID to view recent shipments</p>';
+    }
 }
 
 async function loadRecentShipments(agentId) {
+    const container = document.getElementById('recent-shipments');
+    
     try {
-        const response = await fetch(`http://127.0.0.1:8000/shipments/recent?agent_id=${agentId}&limit=6`);
-        const container = document.getElementById('recent-shipments');
-        
-        if (!response.ok || !response.data) {
-            container.innerHTML = '<p style="color:#64748b; text-align:center;">No shipments yet. Upload your first Excel file!</p>';
-            return;
-        }
-        
-        const shipments = await response.json();
+        const shipments = await Api.shipments.getRecent(agentId, 6);
         
         if (!shipments || shipments.length === 0) {
             container.innerHTML = '<p style="color:#64748b; text-align:center;">No shipments yet. Upload your first Excel file!</p>';
@@ -190,20 +168,29 @@ async function loadRecentShipments(agentId) {
         
     } catch (error) {
         console.error('Error loading recent shipments:', error);
-        document.getElementById('recent-shipments').innerHTML = 
-            '<p style="color:var(--danger); text-align:center;">Error loading recent shipments</p>';
+        container.innerHTML = 
+            '<p style="color:var(--danger); text-align:center;">Error loading recent shipments: ' + error.message + '</p>';
     }
 }
 
 function formatDate(dateString) {
     if (!dateString) return null;
-    return new Date(dateString).toLocaleDateString();
+    try {
+        return new Date(dateString).toLocaleDateString();
+    } catch (e) {
+        return dateString;
+    }
 }
 
 function formatDateTime(dateTimeString) {
     if (!dateTimeString) return 'N/A';
-    const date = new Date(dateTimeString);
-    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    try {
+        const date = new Date(dateTimeString);
+        return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+    } catch (e) {
+        return dateTimeString;
+    }
 }
 
+// Make function globally available
 window.loadDashboard = loadDashboard;

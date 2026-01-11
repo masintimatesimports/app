@@ -33,8 +33,7 @@ async function loadAgentList() {
     const container = document.getElementById('agentContent');
     
     try {
-        const response = await fetch('http://127.0.0.1:8000/agents/');
-        const agents = await response.json();
+        const agents = await Api.agents.getAll();
         
         if (!agents || agents.length === 0) {
             container.innerHTML = `
@@ -49,7 +48,6 @@ async function loadAgentList() {
             `;
             return;
         }
-        
 
         let html = `
             <div style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
@@ -62,7 +60,7 @@ async function loadAgentList() {
                 <table style="width:100%; border-collapse:collapse;">
                     <thead>
                         <tr style="background:#f8fafc; border-bottom:2px solid #e2e8f0;">
-                            <th style="padding:12px; text-align:left;">ID</th> <!-- ADD THIS COLUMN -->
+                            <th style="padding:12px; text-align:left;">ID</th>
                             <th style="padding:12px; text-align:left;">Code</th>
                             <th style="padding:12px; text-align:left;">Name</th>
                             <th style="padding:12px; text-align:left;">Role</th>
@@ -79,7 +77,7 @@ async function loadAgentList() {
             html += `
                 <tr style="border-bottom:1px solid #f1f5f9;" data-agent-id="${agent.agent_id}">
                     <td style="padding:12px;">
-                        <strong>${agent.agent_id}</strong> <!-- ADD THIS CELL -->
+                        <strong>${agent.agent_id}</strong>
                     </td>
                     <td style="padding:12px;">
                         <strong>${agent.agent_code}</strong>
@@ -117,7 +115,6 @@ async function loadAgentList() {
             `;
         });
 
-
         html += `
                     </tbody>
                 </table>
@@ -140,7 +137,6 @@ function searchAgents() {
         const cells = row.querySelectorAll('td');
         let found = false;
         
-        // Search in all cells except the last one (actions column)
         for (let i = 0; i < cells.length - 1; i++) {
             if (cells[i].textContent.toLowerCase().includes(search)) {
                 found = true;
@@ -157,16 +153,12 @@ async function loadCategories() {
     container.innerHTML = '<div style="text-align:center; padding:20px;"><i class="fas fa-spinner fa-spin"></i> Loading categories...</div>';
     
     try {
-        // Load all categories in parallel
-        const [rolesRes, modesRes, specsRes] = await Promise.all([
-            fetch('http://127.0.0.1:8000/agents/roles/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/modes/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/specializations/').catch(() => ({ok: false}))
+        // Load all categories using Api service
+        const [roles, modes, specs] = await Promise.all([
+            Api.agents.getRoles().catch(() => []),
+            Api.agents.getModes().catch(() => []),
+            Api.agents.getSpecializations().catch(() => [])
         ]);
-        
-        const roles = rolesRes.ok ? await rolesRes.json() : [];
-        const modes = modesRes.ok ? await modesRes.json() : [];
-        const specs = specsRes.ok ? await specsRes.json() : [];
         
         let html = `
             <h3>Manage Categories</h3>
@@ -320,15 +312,11 @@ function showAddAgentModal() {
 
 async function loadCategoryDropdowns() {
     try {
-        const [rolesRes, modesRes, specsRes] = await Promise.all([
-            fetch('http://127.0.0.1:8000/agents/roles/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/modes/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/specializations/').catch(() => ({ok: false}))
+        const [roles, modes, specs] = await Promise.all([
+            Api.agents.getRoles().catch(() => []),
+            Api.agents.getModes().catch(() => []),
+            Api.agents.getSpecializations().catch(() => [])
         ]);
-        
-        const roles = rolesRes.ok ? await rolesRes.json() : [];
-        const modes = modesRes.ok ? await modesRes.json() : [];
-        const specs = specsRes.ok ? await specsRes.json() : [];
         
         // Populate role dropdown
         const roleSelect = document.getElementById('agentRole');
@@ -359,6 +347,7 @@ async function loadCategoryDropdowns() {
         
     } catch (error) {
         console.error('Error loading category dropdowns:', error);
+        Api.showNotification('Error loading category options', 'error');
     }
 }
 
@@ -375,27 +364,17 @@ async function saveAgent() {
     };
     
     if (!agentData.agent_code || !agentData.agent_name) {
-        showNotification('Agent Code and Name are required', 'error');
+        Api.showNotification('Agent Code and Name are required', 'error');
         return;
     }
     
     try {
-        const response = await fetch('http://127.0.0.1:8000/agents/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(agentData)
-        });
-        
-        if (response.ok) {
-            showNotification('Agent created successfully', 'success');
-            closeCurrentModal();
-            loadAgentList();
-        } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create agent');
-        }
+        await Api.agents.create(agentData);
+        Api.showNotification('Agent created successfully', 'success');
+        closeCurrentModal();
+        loadAgentList();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
@@ -444,38 +423,36 @@ async function saveCategory(type) {
     const order = parseInt(document.getElementById('catOrder').value) || 0;
     
     if (!name) {
-        showNotification('Name is required', 'error');
+        Api.showNotification('Name is required', 'error');
         return;
     }
     
-    const endpoint = type === 'role' ? 'roles' : type === 'mode' ? 'modes' : 'specializations';
     const typeLabels = {
         'role': 'Agent Role',
         'mode': 'Mode Type',
         'spec': 'Specialization'
     };
     
+    const data = {
+        name: name,
+        description: desc || null,
+        sort_order: order
+    };
+    
     try {
-        const response = await fetch(`http://127.0.0.1:8000/agents/${endpoint}/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: name,
-                description: desc || null,
-                sort_order: order
-            })
-        });
-        
-        if (response.ok) {
-            showNotification(`${typeLabels[type]} created successfully`, 'success');
-            closeCurrentModal();
-            loadCategories();
+        if (type === 'role') {
+            await Api.agents.createRole(data);
+        } else if (type === 'mode') {
+            await Api.agents.createMode(data);
         } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create category');
+            await Api.agents.createSpecialization(data);
         }
+        
+        Api.showNotification(`${typeLabels[type]} created successfully`, 'success');
+        closeCurrentModal();
+        loadCategories();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
@@ -486,20 +463,11 @@ async function toggleAgentStatus(agentId, newStatus) {
     }
     
     try {
-        const response = await fetch(`http://127.0.0.1:8000/agents/${agentId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ active: newStatus === 'true' })
-        });
-        
-        if (response.ok) {
-            showNotification(`Agent ${statusText}d successfully`, 'success');
-            loadAgentList();
-        } else {
-            throw new Error('Failed to update agent status');
-        }
+        await Api.agents.update(agentId, { active: newStatus === 'true' });
+        Api.showNotification(`Agent ${statusText}d successfully`, 'success');
+        loadAgentList();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
@@ -521,9 +489,8 @@ function closeModal(button) {
 // Edit Agent functionality
 async function editAgent(agentId) {
     try {
-        // Get agent data
-        const response = await fetch(`http://127.0.0.1:8000/agents/${agentId}`);
-        const agent = await response.json();
+        // Get agent data using Api service
+        const agent = await Api.agents.getById(agentId);
         
         // Create edit modal
         const modal = document.createElement('div');
@@ -596,10 +563,9 @@ async function editAgent(agentId) {
         
     } catch (error) {
         console.error('Error loading agent for edit:', error);
-        showNotification(`Error loading agent: ${error.message}`, 'error');
+        Api.showNotification(`Error loading agent: ${error.message}`, 'error');
     }
 }
-
 
 async function editCategory(type, id) {
     const typeLabels = {
@@ -608,19 +574,24 @@ async function editCategory(type, id) {
         'spec': 'Specialization'
     };
     
-    const endpoint = type === 'role' ? 'roles' : type === 'mode' ? 'modes' : 'specializations';
-    
     try {
-        // Get category data
-        const response = await fetch(`http://127.0.0.1:8000/agents/${endpoint}/`);
-        const categories = await response.json();
+        // Get all categories first
+        let categories = [];
+        if (type === 'role') {
+            categories = await Api.agents.getRoles();
+        } else if (type === 'mode') {
+            categories = await Api.agents.getModes();
+        } else {
+            categories = await Api.agents.getSpecializations();
+        }
+        
         const category = categories.find(c => 
             type === 'role' ? c.role_id === id : 
             type === 'mode' ? c.mode_id === id : c.spec_id === id
         );
         
         if (!category) {
-            showNotification('Category not found', 'error');
+            Api.showNotification('Category not found', 'error');
             return;
         }
         
@@ -666,7 +637,7 @@ async function editCategory(type, id) {
         
     } catch (error) {
         console.error('Error loading category for edit:', error);
-        showNotification(`Error loading category: ${error.message}`, 'error');
+        Api.showNotification(`Error loading category: ${error.message}`, 'error');
     }
 }
 
@@ -677,54 +648,45 @@ async function updateCategory(type, id) {
     const isActive = document.getElementById('editCatActive').checked;
     
     if (!name) {
-        showNotification('Name is required', 'error');
+        Api.showNotification('Name is required', 'error');
         return;
     }
     
-    const endpoint = type === 'role' ? 'roles' : type === 'mode' ? 'modes' : 'specializations';
     const typeLabels = {
         'role': 'Agent Role',
         'mode': 'Mode Type',
         'spec': 'Specialization'
     };
     
+    const data = {
+        name: name,
+        description: desc || null,
+        sort_order: order,
+        is_active: isActive
+    };
+    
     try {
-        const response = await fetch(`http://127.0.0.1:8000/agents/${endpoint}/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: name,  // This will be mapped to correct column in backend
-                description: desc || null,
-                sort_order: order,
-                is_active: isActive
-            })
-        });
-        
-        if (response.ok) {
-            showNotification(`${typeLabels[type]} updated successfully`, 'success');
-            const modal = document.querySelector('div[style*="position:fixed"]');
-            if (modal) modal.remove();
-            loadCategories(); // Refresh the categories list
-        } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to update category');
+        if (type === 'role') {
+            await Api.agents.updateRole(id, data);
         }
+        // Note: For modes and specializations, you may need to add updateMode and updateSpecialization methods to Api
+        
+        Api.showNotification(`${typeLabels[type]} updated successfully`, 'success');
+        const modal = document.querySelector('div[style*="position:fixed"]');
+        if (modal) modal.remove();
+        loadCategories();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
 async function loadEditCategoryDropdowns(agent) {
     try {
-        const [rolesRes, modesRes, specsRes] = await Promise.all([
-            fetch('http://127.0.0.1:8000/agents/roles/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/modes/').catch(() => ({ok: false})),
-            fetch('http://127.0.0.1:8000/agents/specializations/').catch(() => ({ok: false}))
+        const [roles, modes, specs] = await Promise.all([
+            Api.agents.getRoles().catch(() => []),
+            Api.agents.getModes().catch(() => []),
+            Api.agents.getSpecializations().catch(() => [])
         ]);
-        
-        const roles = rolesRes.ok ? await rolesRes.json() : [];
-        const modes = modesRes.ok ? await modesRes.json() : [];
-        const specs = specsRes.ok ? await specsRes.json() : [];
         
         // Populate role dropdown
         const roleSelect = document.getElementById('editAgentRole');
@@ -758,6 +720,7 @@ async function loadEditCategoryDropdowns(agent) {
         
     } catch (error) {
         console.error('Error loading category dropdowns for edit:', error);
+        Api.showNotification('Error loading category options', 'error');
     }
 }
 
@@ -774,33 +737,20 @@ async function updateAgent(agentId) {
     };
     
     if (!agentData.agent_name) {
-        showNotification('Agent Name is required', 'error');
+        Api.showNotification('Agent Name is required', 'error');
         return;
     }
     
     try {
-        const response = await fetch(`http://127.0.0.1:8000/agents/${agentId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(agentData)
-        });
-        
-        if (response.ok) {
-            showNotification('Agent updated successfully', 'success');
-            // FIX: Close modal FIRST, then refresh list
-            const modal = document.querySelector('div[style*="position:fixed"]');
-            if (modal) modal.remove();
-            loadAgentList();
-        } else {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to update agent');
-        }
+        await Api.agents.update(agentId, agentData);
+        Api.showNotification('Agent updated successfully', 'success');
+        const modal = document.querySelector('div[style*="position:fixed"]');
+        if (modal) modal.remove();
+        loadAgentList();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
-
-
 
 // Make functions globally available
 window.loadAgents = loadAgents;
@@ -811,10 +761,10 @@ window.showAddCategoryModal = showAddCategoryModal;
 window.saveCategory = saveCategory;
 window.toggleAgentStatus = toggleAgentStatus;
 window.editAgent = editAgent;
-window.editCategory = editCategory;  // This is the CORRECT function
+window.editCategory = editCategory;
 window.searchAgents = searchAgents;
 window.renderCategoryList = renderCategoryList;
 window.closeCurrentModal = closeCurrentModal;
 window.closeModal = closeModal;
 window.updateAgent = updateAgent;
-window.updateCategory = updateCategory;  // Add this
+window.updateCategory = updateCategory;

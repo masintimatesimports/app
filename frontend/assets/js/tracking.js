@@ -1,4 +1,4 @@
-function loadTracking() {
+async function loadTracking() {
     document.getElementById('content-area').innerHTML = `
         <div class="tracking-container">
             <h2><i class="fas fa-search"></i> Track Shipment</h2>
@@ -23,30 +23,19 @@ function loadTracking() {
 
 async function trackShipment() {
     const hbl = document.getElementById('trackHbl').value.trim();
-    const agentId = document.getElementById('agentId').value;
-    
-    if (!agentId) {
-        showNotification('Please enter Agent ID first', 'error');
-        return;
-    }
-    
-    if (!hbl) {
-        showNotification('Please enter HBL number', 'error');
-        return;
-    }
-    
-    const results = document.getElementById('trackingResults');
-    results.innerHTML = '<div style="padding:20px; text-align:center;">Searching...</div>';
     
     try {
-        const url = `http://127.0.0.1:8000/shipments/${encodeURIComponent(hbl)}?agent_id=${agentId}`;
-        const res = await fetch(url);
+        const agentId = Api.getAgentId();
         
-        if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
+        if (!hbl) {
+            Api.showNotification('Please enter HBL number', 'error');
+            return;
         }
         
-        const data = await res.json();
+        const results = document.getElementById('trackingResults');
+        results.innerHTML = '<div style="padding:20px; text-align:center;">Searching...</div>';
+        
+        const data = await Api.shipments.getByHbl(hbl, agentId);
         
         if (!Array.isArray(data) || data.length === 0) {
             results.innerHTML = `
@@ -94,28 +83,30 @@ async function trackShipment() {
                             <div style="color:#1e293b; font-size:1.1em;">${shipment.vessel_name || 'N/A'}</div>
                         </div>
                         <div>
-                            <label style="font-weight:600; color:#64748b; font-size:0.9em;">Voyage:</label>
+                            <label style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-weight:600; color:#64748b; font-size:0.9em;">Voyage:</span>
+                                <button class="btn-secondary" onclick="updateStatusPrompt('${shipment.hbl_number}')" style="padding:4px 8px; font-size:0.8em;">
+                                    <i class="fas fa-edit"></i> Update Status
+                                </button>
+                            </label>
                             <div style="color:#1e293b; font-size:1.1em;">${shipment.voyage_no || 'N/A'}</div>
                         </div>
-                    </div>
-                    
-                    <div>
-                        <button class="btn-secondary" onclick="updateStatusPrompt('${shipment.hbl_number}')">
-                            <i class="fas fa-edit"></i> Update Status
-                        </button>
                     </div>
                 </div>
             </div>
         `;
     } catch (error) {
         console.error('Error:', error);
-        results.innerHTML = `
-            <div style="text-align:center; padding:40px; background:#fee2e2; border-radius:8px; color:#dc2626;">
-                <i class="fas fa-exclamation-circle fa-3x"></i>
-                <h3>Error loading shipment</h3>
-                <p>${error.message}</p>
-            </div>
-        `;
+        const results = document.getElementById('trackingResults');
+        if (results) {
+            results.innerHTML = `
+                <div style="text-align:center; padding:40px; background:#fee2e2; border-radius:8px; color:#dc2626;">
+                    <i class="fas fa-exclamation-circle fa-3x"></i>
+                    <h3>Error loading shipment</h3>
+                    <p>${error.message}</p>
+                </div>
+            `;
+        }
     }
 }
 
@@ -127,29 +118,28 @@ function updateStatusPrompt(hbl) {
 }
 
 async function updateStatus(hbl, status) {
-    const agentId = document.getElementById('agentId').value;
-    
     try {
-        const res = await fetch(
-            `http://127.0.0.1:8000/shipments/${hbl}/status?agent_id=${agentId}&status=${status}`,
-            { method: "PATCH" }
-        );
-
-        const data = await res.json();
-        showNotification(data.updated ? "✅ Status updated" : "❌ Update failed");
+        const agentId = Api.getAgentId();
+        const data = await Api.shipments.updateStatus(hbl, agentId, status);
+        
+        Api.showNotification(data.updated ? "✅ Status updated" : "❌ Update failed");
         
         // Refresh if tracking the same HBL
         if (document.getElementById('trackHbl')?.value === hbl) {
             trackShipment();
         }
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        Api.showNotification(`Error: ${error.message}`, 'error');
     }
 }
 
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString();
+    try {
+        return new Date(dateString).toLocaleDateString();
+    } catch (e) {
+        return dateString;
+    }
 }
 
 // Make functions globally available
