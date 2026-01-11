@@ -14,8 +14,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy the rest of your backend code
 COPY shipment_backend/ ./shipment_backend/
 
+# Set WORKDIR to shipment_backend folder
+WORKDIR /app/shipment_backend
+
 # Expose port 8000 (FastAPI default)
 EXPOSE 8000
 
-# Command to run your app
-CMD ["uvicorn", "shipment_backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run your app - NO 'cd' needed!
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
