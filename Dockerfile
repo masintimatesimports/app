@@ -1,18 +1,20 @@
 FROM python:3.11-slim
 
-# Set working directory
+# Debug: List directory structure
+RUN ls -la
+
 WORKDIR /app
 
-# Copy requirements and install
+# Copy requirements
 COPY shipment_backend/requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN cat requirements.txt  # Debug: Show requirements
+RUN pip install -r requirements.txt
 
-# Copy ALL backend code
+# Copy backend code
 COPY shipment_backend/ .
 
-# Run from the /app directory (which now has all your code)
-WORKDIR /app
+# Debug: Show what was copied
+RUN find /app -type f -name "*.py" | head -20
 
-# Use the PORT environment variable that Railway provides
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${PORT:-8000}"]
+# Run with simple shell command
+CMD ["sh", "-c", "cd /app && pwd && ls -la && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
