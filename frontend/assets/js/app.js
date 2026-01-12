@@ -10,7 +10,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Navigation
 function setupNavigation() {
-    // Sidebar links
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    // Update topbar with user info
+    const welcomeText = document.getElementById('welcome-text');
+    const roleIndicator = document.getElementById('role-indicator');
+    
+    if (welcomeText && user) {
+        welcomeText.textContent = `Welcome, ${user.username}`;
+    }
+    
+    if (roleIndicator) {
+        roleIndicator.innerHTML = isAdmin ? 
+            '<span style="background:#10b981; color:white; padding:4px 8px; border-radius:12px;">Admin</span>' :
+            '<span style="background:#3b82f6; color:white; padding:4px 8px; border-radius:12px;">Business</span>';
+    }
+    
+    // Add logout handler
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+        logoutBtn.onclick = function() {
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
+        };
+    }
+    
+    // Business users see limited menu (keep this part)
+    if (!isAdmin) {
+        const allowedPages = ['dashboard', 'tracking'];
+        const navItems = document.querySelectorAll('.nav-menu li');
+        
+        navItems.forEach(item => {
+            const link = item.querySelector('a');
+            const page = link.getAttribute('href').substring(1);
+            if (!allowedPages.includes(page)) {
+                item.style.display = 'none';
+            }
+        });
+    }
+    
+    // Sidebar links (keep this part)
     document.querySelectorAll('.nav-menu a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
@@ -19,6 +59,7 @@ function setupNavigation() {
         });
     });
 }
+
 
 function navigateTo(page) {
     // Update active nav item

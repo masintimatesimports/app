@@ -327,3 +327,20 @@ def update_category(table: str, id_field: str, item_id: int, payload: CategoryUp
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error updating category: {str(e)}")
     raise HTTPException(status_code=400, detail="No updates provided")
+
+@router.get("/dropdown-list")
+def get_agents_dropdown():
+    """Get agent list for dropdown (id + name)"""
+    try:
+        res = supabase.table("agents").select("agent_id, agent_name, agent_code")\
+            .eq("active", True)\
+            .order("agent_name")\
+            .execute()
+        
+        agents = res.data or []
+        return [{
+            "id": a["agent_id"],
+            "name": f"{a['agent_name']} ({a['agent_code']})"
+        } for a in agents]
+    except Exception as e:
+        return []

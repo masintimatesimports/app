@@ -2,15 +2,24 @@ let workbook = null;
 let currentSheet = '';
 
 async function loadMapping() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
     document.getElementById('content-area').innerHTML = `
         <div class="upload-container">
             <h2><i class="fas fa-columns"></i> Column Mapping</h2>
             <p>Manage Excel column mappings</p>
             
+            ${isAdmin ? `
             <div class="input-group">
-                <label>Agent ID</label>
-                <input type="number" id="mapAgentId" placeholder="Agent ID" value="${Api.getAgentId() || ''}" onchange="loadAllSheets()">
+                <label>Select Agent</label>
+                <select id="mapAgentSelect" onchange="loadAllSheets()" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                    <option value="">Loading agents...</option>
+                </select>
             </div>
+            ` : `
+            <input type="hidden" id="mapAgentId" value="1">
+            `}
             
             <!-- Section 1: View/Edit Existing Mappings -->
             <div id="existingSection" style="margin-top:30px;">
@@ -59,16 +68,29 @@ async function loadMapping() {
     
     // Load existing sheets and mappings
     await loadAllSheets();
+    if (isAdmin) {
+        await loadMappingAgents();
+    }
+
 }
 
 // Load all sheets that have mappings for this agent
 async function loadAllSheets() {
-    const agentIdInput = document.getElementById('mapAgentId');
-    const agentId = agentIdInput ? agentIdInput.value : null;
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    let agentId;
+    if (isAdmin) {
+        const select = document.getElementById('mapAgentSelect');
+        agentId = select ? select.value : null;
+    } else {
+        const hiddenInput = document.getElementById('mapAgentId');
+        agentId = hiddenInput ? hiddenInput.value : "1";
+    }
     
     if (!agentId) {
         document.getElementById('allMappingsList').innerHTML = 
-            '<p style="color:#64748b; text-align:center;">Enter Agent ID to view mappings</p>';
+            '<p style="color:#64748b; text-align:center;">Select an agent to view mappings</p>';
         return;
     }
     
@@ -184,8 +206,18 @@ function handleFileUpload(file) {
 
 // Load sheet for mapping (with existing data) - FIXED with TRIM
 async function loadSheetForMapping() {
-    const agentIdInput = document.getElementById('mapAgentId');
-    const agentId = agentIdInput ? agentIdInput.value : null;
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    let agentId;
+    if (isAdmin) {
+        const select = document.getElementById('mapAgentSelect');
+        agentId = select ? select.value : null;
+    } else {
+        const hiddenInput = document.getElementById('mapAgentId');
+        agentId = hiddenInput ? hiddenInput.value : "1";
+    }
+    
     const sheetSelect = document.getElementById('sheetSelect');
     const sheetName = sheetSelect ? sheetSelect.value : '';
     
@@ -275,8 +307,17 @@ async function renderMappingForm(excelColumns, existingMappings) {
 
 // Save mapping - FIXED with TRIM
 async function saveMapping() {
-    const agentIdInput = document.getElementById('mapAgentId');
-    const agentId = agentIdInput ? parseInt(agentIdInput.value) : null;
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    let agentId;
+    if (isAdmin) {
+        const select = document.getElementById('mapAgentSelect');
+        agentId = select ? parseInt(select.value) : null;
+    } else {
+        const hiddenInput = document.getElementById('mapAgentId');
+        agentId = hiddenInput ? parseInt(hiddenInput.value) : 1;
+    }
     const sheetName = currentSheet;
     
     if (!agentId || !sheetName) {
@@ -335,10 +376,18 @@ async function editSheet(sheetName) {
         formContainer.scrollIntoView({ behavior: 'smooth' });
     }
 }
-
 async function deleteAllMappings(sheetName) {
-    const agentIdInput = document.getElementById('mapAgentId');
-    const agentId = agentIdInput ? agentIdInput.value : null;
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    let agentId;
+    if (isAdmin) {
+        const select = document.getElementById('mapAgentSelect');
+        agentId = select ? select.value : null;
+    } else {
+        const hiddenInput = document.getElementById('mapAgentId');
+        agentId = hiddenInput ? hiddenInput.value : "1";
+    }
     
     if (!agentId) {
         Api.showNotification('Please enter Agent ID first', 'error');
@@ -385,6 +434,41 @@ async function getStandardFields() {
     ];
 }
 
+async function loadMappingAgents() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    if (!isAdmin) return; // Business users use Agent ID 1
+    
+    try {
+        const agents = await Api.agents.getAll();
+        const select = document.getElementById('mapAgentSelect');
+        if (!select) return;
+        
+        select.innerHTML = '<option value="">-- Select Agent --</option>';
+        
+        agents.forEach(agent => {
+            const option = document.createElement('option');
+            option.value = agent.agent_id;
+            option.textContent = `${agent.agent_name} (${agent.agent_code})`;
+            select.appendChild(option);
+        });
+        
+        // Auto-select first agent and load sheets
+        if (agents.length > 0) {
+            select.value = agents[0].agent_id;
+            setTimeout(() => loadAllSheets(), 100);
+        }
+        
+    } catch (error) {
+        console.error('Error loading agents for mapping:', error);
+        const select = document.getElementById('mapAgentSelect');
+        if (select) {
+            select.innerHTML = '<option value="">Error loading agents</option>';
+        }
+    }
+}
+
 // Make functions globally available
 window.loadMapping = loadMapping;
 window.handleFileUpload = handleFileUpload;
@@ -393,3 +477,5 @@ window.saveMapping = saveMapping;
 window.editSheet = editSheet;
 window.deleteAllMappings = deleteAllMappings;
 window.loadAllSheets = loadAllSheets;
+window.loadMappingAgents = loadMappingAgents;
+

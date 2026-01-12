@@ -73,17 +73,37 @@ class ApiService {
     }
 
     // Shipments API
+    // Shipments API
     shipments = {
         getTotalCount: () => this.fetchJson('/shipments/total-count'),
         getPendingCount: () => this.fetchJson('/shipments/pending-count'),
         getRecent: (agentId, limit = 6) => 
             this.fetchJson(`/shipments/recent?agent_id=${agentId}&limit=${limit}`),
-        getByHbl: (hbl, agentId) => 
-            this.fetchJson(`/shipments/${encodeURIComponent(hbl)}?agent_id=${agentId}`),
+        
+        // Updated: Can be called with or without agentId
+        getByHbl: (hbl, agentId = null) => {
+            let url = `/shipments/search?hbl=${encodeURIComponent(hbl)}`;
+            if (agentId) {
+                url += `&agent_id=${agentId}`;
+            }
+            return this.fetchJson(url);
+        },
+        
+        // New: Generic search method
+        search: (hbl, agentId = null) => {
+            let url = `/shipments/search?hbl=${encodeURIComponent(hbl)}`;
+            if (agentId) {
+                url += `&agent_id=${agentId}`;
+            }
+            return this.fetchJson(url);
+        },
+        
         updateStatus: (hbl, agentId, status) =>
             this.fetchJson(`/shipments/${hbl}/status?agent_id=${agentId}&status=${status}`, {
                 method: 'PATCH'
             }),
+        
+        // Legacy: Kept for backward compatibility
         searchByHbl: (hbl, agentId) => 
             this.fetchJson(`/shipments/search?hbl=${encodeURIComponent(hbl)}&agent_id=${agentId}`)
     };
@@ -131,6 +151,7 @@ class ApiService {
             method: 'PATCH',
             body: JSON.stringify(data)
         }),
+        getDropdownList: () => this.fetchJson('/agents/dropdown-list'),
         
         // Status management
         updateStatus: (agentId, active) => 
@@ -188,11 +209,15 @@ class ApiService {
     };
 
     // Helper: Get current agent ID (enhanced version)
+    // In api.js, update the getAgentId() method:
     getAgentId() {
         // Try multiple possible element IDs
         const agentIdElements = [
-            document.getElementById('agentId'),
-            document.getElementById('mapAgentId')
+            document.getElementById('uploadAgentSelect'),  // Admin upload dropdown
+            document.getElementById('uploadAgentId'),      // Regular upload input
+            document.getElementById('trackAgentSelect'),   // Tracking page dropdown
+            document.getElementById('agentId'),            // Main sidebar input
+            document.getElementById('mapAgentId')          // Mapping page input
         ];
         
         let agentId = null;
@@ -207,21 +232,9 @@ class ApiService {
         }
         
         if (!agentId) {
-            // Try to find any input with "agent" in the name/id
-            const agentInputs = document.querySelectorAll('input[id*="agent"], input[name*="agent"]');
-            for (const input of agentInputs) {
-                if (input.value) {
-                    agentId = input.value;
-                    element = input;
-                    break;
-                }
-            }
-        }
-        
-        if (!agentId) {
-            this.showNotification('Please enter Agent ID first', 'error');
-            // Focus on the first agent ID input found
-            const firstAgentInput = document.getElementById('agentId') || document.getElementById('mapAgentId');
+            this.showNotification('Please select/enter Agent ID first', 'error');
+            // Focus on the first available agent input
+            const firstAgentInput = agentIdElements.find(el => el);
             if (firstAgentInput) {
                 firstAgentInput.focus();
             }

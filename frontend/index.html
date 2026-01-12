@@ -24,19 +24,24 @@
                 <li><a href="#agents"><i class="fas fa-users-cog"></i> Agent Management</a></li>
             </ul>
             <div class="agent-info">
-                <div class="agent-id-input">
-                    <label>Agent ID:</label>
-                    <input type="number" id="agentId" placeholder="Enter ID" value="1">
-                </div>
+
             </div>
         </nav>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="topbar">
-                <h1 id="page-title">Dashboard</h1>
+                <div style="display: flex; align-items: center; gap: 20px;">
+                    <h1 id="page-title">Dashboard</h1>
+                    <div id="role-indicator" style="font-size: 0.9em; color: #64748b;">
+                        <!-- Role will be added by JavaScript -->
+                    </div>
+                </div>
                 <div class="user-info">
-                    <span>Welcome, Agent</span>
+                    <span id="welcome-text">Welcome</span>
+                    <button id="logout-btn" class="btn-secondary" style="margin-left: 15px; padding: 8px 15px;">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
                 </div>
             </header>
 

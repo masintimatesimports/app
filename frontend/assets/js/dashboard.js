@@ -1,6 +1,26 @@
 async function loadDashboard() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    // Add role indicator to dashboard
+    const roleBadge = isAdmin ? 
+        '<span style="background:#10b981; color:white; padding:4px 8px; border-radius:4px; font-size:0.8em; margin-left:10px;">Admin</span>' :
+        '<span style="background:#3b82f6; color:white; padding:4px 8px; border-radius:4px; font-size:0.8em; margin-left:10px;">Business</span>';
+
     document.getElementById('content-area').innerHTML = `
         <div class="dashboard">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Dashboard ${roleBadge}</h2>
+                ${isAdmin ? `
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <label style="font-weight:500;">Select Agent:</label>
+                    <select id="dashboardAgentSelect" style="padding:8px 12px; border:1px solid #ddd; border-radius:6px; min-width:200px;">
+                        <option value="">Loading agents...</option>
+                    </select>
+                </div>
+                ` : ''}
+            </div>
+            
             <div class="stats-grid">
                 <div class="stat-card">
                     <i class="fas fa-box"></i>
@@ -46,17 +66,82 @@ async function loadDashboard() {
         </div>
     `;
     
+    // Load agents dropdown for admin
+    if (isAdmin) {
+        await loadAgentDropdown();
+    }
+    
+
+    
     await loadDashboardStats();
 }
 
+async function loadAgentDropdown() {
+    try {
+        // Get agents list
+        const agents = await Api.agents.getAll();
+        
+        const select = document.getElementById('dashboardAgentSelect');
+        if (!select) return;
+        
+        // Clear and populate dropdown
+        select.innerHTML = '<option value="">-- Select Agent --</option>';
+        
+        agents.forEach(agent => {
+            const option = document.createElement('option');
+            option.value = agent.agent_id;
+            option.textContent = `${agent.agent_name} (${agent.agent_code})`;
+            select.appendChild(option);
+        });
+        
+        // Add change listener to refresh stats
+        select.addEventListener('change', async () => {
+            await loadDashboardStats();
+        });
+        
+        // Auto-select first agent
+        if (agents.length > 0) {
+            select.value = agents[0].agent_id;
+        }
+        
+    } catch (error) {
+        console.error('Error loading agents dropdown:', error);
+        const select = document.getElementById('dashboardAgentSelect');
+        if (select) {
+            select.innerHTML = '<option value="">Error loading agents</option>';
+        }
+    }
+}
+
 async function loadDashboardStats() {
-    const agentId = Api.getAgentId();
+    let agentId;
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    if (isAdmin) {
+        // Get selected agent from dropdown
+        const select = document.getElementById('dashboardAgentSelect');
+        if (!select || !select.value) {
+            showPlaceholderData('Please select an agent');
+            return;
+        }
+        agentId = parseInt(select.value);
+    } else {
+        // Business user always uses Agent ID 1
+        agentId = 1;
+    }
+    
     if (!agentId) {
-        showPlaceholderData();
+        showPlaceholderData('Agent ID required');
         return;
     }
     
     try {
+        // Update API.js to get agent ID from dashboard dropdown
+        // Temporary override for dashboard
+        const originalGetAgentId = Api.getAgentId;
+        Api.getAgentId = () => agentId;
+        
         // 1. Get total unique shipments count
         const totalData = await Api.shipments.getTotalCount();
         document.getElementById('total-shipments').textContent = totalData.count || 0;
@@ -82,22 +167,16 @@ async function loadDashboardStats() {
         // 5. Load recent shipments
         await loadRecentShipments(agentId);
         
+        // Restore original function
+        Api.getAgentId = originalGetAgentId;
+        
     } catch (error) {
         console.error('Dashboard error:', error);
-        showPlaceholderData();
-        
-        // Still try to show recent shipments if agent ID is valid
-        if (agentId) {
-            try {
-                await loadRecentShipments(agentId);
-            } catch (shipmentsError) {
-                console.error('Recent shipments error:', shipmentsError);
-            }
-        }
+        showPlaceholderData(error.message);
     }
 }
 
-function showPlaceholderData() {
+function showPlaceholderData(message = 'Select agent to view data') {
     document.getElementById('total-shipments').textContent = '--';
     document.getElementById('pending-updates').textContent = '--';
     document.getElementById('excel-files').textContent = '--';
@@ -106,7 +185,7 @@ function showPlaceholderData() {
     const container = document.getElementById('recent-shipments');
     if (container) {
         container.innerHTML = 
-            '<p style="color:#64748b; text-align:center;">Enter Agent ID to view recent shipments</p>';
+            `<p style="color:#64748b; text-align:center;">${message}</p>`;
     }
 }
 

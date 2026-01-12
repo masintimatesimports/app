@@ -1,26 +1,68 @@
+// upload.js - COMPLETE WORKING VERSION WITH AGENT SELECTION
 let detectedSheets = [];
 let selectedSheets = new Set();
+let allAgents = [];
 
-function loadUpload() {
+async function loadUpload() {
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
+    
+    // Load all agents if admin
+    if (isAdmin) {
+        try {
+            allAgents = await Api.agents.getAll();
+        } catch (error) {
+            console.error('Error loading agents:', error);
+            allAgents = [];
+        }
+    }
+    
     document.getElementById('content-area').innerHTML = `
         <div class="upload-container">
             <h2><i class="fas fa-file-upload"></i> Upload Excel File</h2>
+            
+            <!-- Agent Selection Section -->
+            <div class="input-group">
+                <label>Select Agent for Upload</label>
+                ${isAdmin && allAgents.length > 0 ? `
+                    <select id="uploadAgentSelect" class="agent-select" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                        <option value="">-- Select Agent --</option>
+                        ${allAgents.map(agent => `
+                            <option value="${agent.agent_id}">${agent.agent_name} (${agent.agent_code})</option>
+                        `).join('')}
+                    </select>
+                ` : `
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <input type="number" id="uploadAgentId" placeholder="Enter Agent ID" 
+                               value="${document.getElementById('agentId')?.value || ''}"
+                               style="flex:1; padding:10px; border:1px solid #ddd; border-radius:6px;">
+                        <span style="font-size:0.9em; color:#64748b;">
+                            (Current Agent: ${document.getElementById('agentId')?.value || 'Not set'})
+                        </span>
+                    </div>
+                `}
+            </div>
+            
             <p>Upload your shipment data from Excel files</p>
             
+            <!-- File Selection -->
             <div class="input-group">
                 <label>Select Excel File</label>
                 <input type="file" id="excelFile" accept=".xlsx,.xls" class="file-input-field">
             </div>
             
+            <!-- Sheets Selection -->
             <div id="sheetsSection" style="display:none; margin-top:20px;">
                 <label>Select Sheets to Import:</label>
                 <div id="sheetsList" class="sheets-list"></div>
             </div>
             
+            <!-- Upload Button -->
             <button class="btn-primary" onclick="uploadExcel()" id="uploadBtn" style="margin-top:20px;">
                 <i class="fas fa-upload"></i> Upload Selected Sheets
             </button>
             
+            <!-- Status Display -->
             <div id="uploadStatus" style="margin-top:20px;"></div>
         </div>
     `;
@@ -77,13 +119,38 @@ function toggleSheet(sheet) {
     renderSheetsList();
 }
 
+// CRITICAL: Update the getAgentId function in api.js
+// Add this method to your ApiService class in api.js:
+
 async function uploadExcel() {
-    const agentId = Api.getAgentId();
-    const fileInput = document.getElementById('excelFile');
+    // Get agent ID based on selection
+    const user = JSON.parse(localStorage.getItem('user'));
+    const isAdmin = user && user.role === 'admin';
     
-    if (!agentId) {
-        return; // Api.getAgentId() already shows notification
+    let agentId;
+    if (isAdmin) {
+        const select = document.getElementById('uploadAgentSelect');
+        if (!select || !select.value) {
+            Api.showNotification('Please select an agent from the dropdown', 'error');
+            return;
+        }
+        agentId = parseInt(select.value);
+    } else {
+        // For non-admin, use the input field
+        const input = document.getElementById('uploadAgentId');
+        if (!input || !input.value) {
+            Api.showNotification('Please enter Agent ID', 'error');
+            return;
+        }
+        agentId = parseInt(input.value);
     }
+    
+    if (!agentId || isNaN(agentId) || agentId <= 0) {
+        Api.showNotification('Invalid Agent ID', 'error');
+        return;
+    }
+    
+    const fileInput = document.getElementById('excelFile');
     
     if (!fileInput || !fileInput.files[0]) {
         Api.showNotification('Please select an Excel file', 'error');
@@ -105,14 +172,41 @@ async function uploadExcel() {
         uploadStatus.innerHTML = '<div style="text-align:center;"><i class="fas fa-spinner fa-spin"></i> Uploading...</div>';
     }
 
+    // Disable upload button during upload
+    const uploadBtn = document.getElementById('uploadBtn');
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    }
+
     try {
         const data = await Api.uploads.excel(formData);
         
         if (uploadStatus) {
-            uploadStatus.innerHTML = `✅ Processed ${data.rows_processed || 0} rows`;
+            if (data.rows_processed > 0) {
+                uploadStatus.innerHTML = `
+                    <div style="background:#d1fae5; color:#065f46; padding:15px; border-radius:6px; text-align:center;">
+                        <i class="fas fa-check-circle"></i> Successfully processed ${data.rows_processed} rows
+                    </div>
+                `;
+            } else {
+                uploadStatus.innerHTML = `
+                    <div style="background:#fef3c7; color:#92400e; padding:15px; border-radius:6px; text-align:center;">
+                        <i class="fas fa-exclamation-triangle"></i> No rows processed. Check your Excel format.
+                    </div>
+                `;
+            }
             
             if (data.errors && data.errors.length > 0) {
-                uploadStatus.innerHTML += `<br><small>With ${data.errors.length} errors</small>`;
+                uploadStatus.innerHTML += `
+                    <div style="margin-top:10px; color:#dc2626;">
+                        <strong>Errors:</strong>
+                        <ul style="text-align:left; font-size:0.9em;">
+                            ${data.errors.slice(0, 5).map(error => `<li>${error.error || error}</li>`).join('')}
+                            ${data.errors.length > 5 ? `<li>...and ${data.errors.length - 5} more errors</li>` : ''}
+                        </ul>
+                    </div>
+                `;
             }
         }
         
@@ -124,7 +218,17 @@ async function uploadExcel() {
     } catch (error) {
         console.error('Upload error:', error);
         if (uploadStatus) {
-            uploadStatus.innerHTML = `❌ Error: ${error.message}`;
+            uploadStatus.innerHTML = `
+                <div style="background:#fee2e2; color:#dc2626; padding:15px; border-radius:6px; text-align:center;">
+                    <i class="fas fa-exclamation-circle"></i> Error: ${error.message}
+                </div>
+            `;
+        }
+    } finally {
+        // Re-enable upload button
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Selected Sheets';
         }
     }
 }

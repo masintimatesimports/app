@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipTrack Login</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        .login-logo {
+            color: #2563eb;
+            margin-bottom: 30px;
+        }
+        
+        .login-logo h1 {
+            font-size: 2.5em;
+            margin: 10px 0;
+        }
+        
+        .login-input {
+            width: 100%;
+            padding: 12px 15px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .login-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .powered-by {
+            margin-top: 30px;
+            color: #64748b;
+            font-size: 0.9em;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+        
+        .powered-by span {
+            font-weight: 600;
+            color: #2563eb;
+            font-style: italic;
+        }
+        
+        .error-msg {
+            color: #ef4444;
+            margin-top: 10px;
+            font-size: 0.9em;
+            display: none;
+        }
+        
+        .user-hint {
+            background: #f8fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #64748b;
+            text-align: left;
+        }
+        
+        .user-hint h4 {
+            margin: 0 0 10px 0;
+            color: #1e293b;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-logo">
+                <i class="fas fa-ship fa-3x"></i>
+                <h1>ShipTrack</h1>
+                <p>Shipment Management Portal</p>
+            </div>
+            
+            <form id="loginForm">
+                <input type="text" class="login-input" id="username" placeholder="Username" required>
+                <input type="password" class="login-input" id="password" placeholder="Password" required>
+                
+                <div id="errorMessage" class="error-msg">
+                    <i class="fas fa-exclamation-circle"></i> Invalid credentials
+                </div>
+                
+                <button type="submit" class="login-btn">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+            
+            <div class="user-hint">
+                <h4>Demo Credentials:</h4>
+                <p><strong>Admin:</strong> admin / admin123</p>
+                <p><strong>Business:</strong> business / user123</p>
+            </div>
+            
+            <div class="powered-by">
+                Powered by <span>L</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            // Hardcoded credentials
+            const users = {
+                'admin': { password: 'admin123', role: 'admin' },
+                'business': { password: 'user123', role: 'business' }
+            };
+            
+            if (users[username] && users[username].password === password) {
+                // Store user info
+                localStorage.setItem('user', JSON.stringify({
+                    username: username,
+                    role: users[username].role,
+                    loggedIn: true,
+                    timestamp: new Date().getTime()
+                }));
+                
+                // Redirect to main app
+                window.location.href = 'index.html';
+            } else {
+                document.getElementById('errorMessage').style.display = 'block';
+                setTimeout(() => {
+                    document.getElementById('errorMessage').style.display = 'none';
+                }, 3000);
+            }
+        });
+        
+        // Auto-focus username field
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>
