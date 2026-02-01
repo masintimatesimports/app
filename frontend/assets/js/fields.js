@@ -134,6 +134,8 @@ function closeModal() {
     }
 }
 
+
+// MODIFY createField function
 async function createField() {
     const fieldData = {
         field_key: document.getElementById('fieldKeyInput').value.trim(),
@@ -148,13 +150,103 @@ async function createField() {
     }
     
     try {
-        await Api.fields.create(fieldData);
-        Api.showNotification('Custom field created successfully', 'success');
+        // Show loading
+        const modalFooter = document.querySelector('.modal-footer');
+        if (modalFooter) {
+            modalFooter.innerHTML = `
+                <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn-primary" disabled>
+                    <i class="fas fa-spinner fa-spin"></i> Creating field...
+                </button>
+            `;
+        }
+        
+        const result = await Api.fields.create(fieldData);
+        
+        // Check if column was added
+        if (result.column_added) {
+            Api.showNotification(`✅ Field '${result.field_label}' created and column added to database`, 'success');
+        } else {
+            Api.showNotification(
+                `⚠️ Field '${result.field_label}' created but column addition failed: ${result.column_message || 'Try syncing later'}`,
+                'warning'
+            );
+        }
+        
         closeModal();
         await loadFieldsList();
+        
     } catch (error) {
         Api.showNotification(`Error: ${error.message}`, 'error');
     }
+}
+
+// ADD syncColumn function
+async function syncFieldColumn(fieldId) {
+    if (!confirm('Add this field as a column in the database?')) {
+        return;
+    }
+    
+    try {
+        // Use the new sync endpoint
+        const response = await Api.fetchJson(`/fields/${fieldId}/sync-column`, {
+            method: 'POST'
+        });
+        
+        if (response.success) {
+            Api.showNotification(`✅ Column '${response.field_key}' added successfully`, 'success');
+        } else {
+            Api.showNotification(`❌ Failed: ${response.message}`, 'error');
+        }
+        
+        await loadFieldsList();
+        
+    } catch (error) {
+        Api.showNotification(`Error: ${error.message}`, 'error');
+    }
+}
+
+// MODIFY field card display in loadFieldsList()
+function renderFieldCard(field) {
+    const columnStatus = field.column_added 
+        ? `<span class="badge" style="background:#d1fae5; color:#065f46;">
+            <i class="fas fa-columns"></i> Column Added
+           </span>`
+        : `<span class="badge" style="background:#fef3c7; color:#92400e;">
+            <i class="fas fa-exclamation-triangle"></i> Column Pending
+           </span>`;
+    
+    return `
+        <div class="field-card">
+            <div class="field-info">
+                <h4>${field.field_label} ${columnStatus}</h4>
+                <div class="field-meta">
+                    <span class="field-key">Key: ${field.field_key}</span>
+                    <span class="badge badge-type">${field.field_type}</span>
+                    ${field.required ? '<span class="badge badge-required">Required</span>' : ''}
+                </div>
+                ${field.column_message ? `
+                    <div style="font-size:0.8em; color:#64748b; margin-top:5px;">
+                        ${field.column_message}
+                    </div>
+                ` : ''}
+            </div>
+            <div>
+                ${!field.column_added ? `
+                    <button class="btn-icon" onclick="syncFieldColumn(${field.field_id})" 
+                            title="Add as database column" style="color:var(--primary);">
+                        <i class="fas fa-columns"></i>
+                    </button>
+                ` : ''}
+                <button class="btn-icon" onclick="editField(${field.field_id})" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn-icon btn-danger" onclick="deleteField(${field.field_id})" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 async function editField(fieldId) {

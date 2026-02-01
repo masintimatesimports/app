@@ -111,6 +111,8 @@ async function trackShipment() {
             return;
         }
         
+        renderDynamicSearchTable(data);
+
         // Display multiple results if admin searched across all agents
         if (isAdmin && data.length > 1) {
             displayMultipleShipments(data);
@@ -136,7 +138,7 @@ function displaySingleShipment(shipment) {
     const agentName = shipment.agent_name || `Agent ${shipment.agent_id}`;
     
     document.getElementById('trackingResults').innerHTML = `
-        <div style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.08);">
+        <div style="background:white; border-radius:12px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.08); margin-bottom:20px;">
             <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
@@ -183,9 +185,15 @@ function displaySingleShipment(shipment) {
                         <div style="color:#1e293b; font-size:1.1em;">${shipment.voyage_no || 'N/A'}</div>
                     </div>
                 </div>
+                
+                <!-- ADD TABLE VIEW HERE -->
+                <div id="detailTableView"></div>
             </div>
         </div>
     `;
+    
+    // Now render the table for this single shipment
+    renderDynamicSearchTable([shipment]);
 }
 
 function displayMultipleShipments(shipments) {
@@ -301,6 +309,76 @@ function formatDate(dateString) {
         return dateString;
     }
 }
+
+
+function renderDynamicSearchTable(data) {
+    const rows = Array.isArray(data) ? data : [data];
+    if (!rows.length) return;
+
+    const columns = new Set();
+    rows.forEach(obj => {
+        Object.keys(obj || {}).forEach(k => columns.add(k));
+    });
+
+    const colList = [...columns];
+    const targetId = rows.length === 1 ? 'detailTableView' : 'trackingResults';
+    
+    let html = `
+        <div style="margin-top:20px; padding-top:20px; border-top:1px solid #e2e8f0;">
+            <h4 style="margin:0 0 10px 0; display:flex; align-items:center; gap:8px;">
+                <i class="fas fa-table"></i> Complete Data Table
+            </h4>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; font-size:0.9em; border:1px solid #e2e8f0;">
+                    <thead>
+                        <tr style="background:#f8fafc;">
+    `;
+
+    colList.forEach(col => {
+        const displayName = col.replace(/_/g, ' ')
+            .replace(/\b\w/g, char => char.toUpperCase());
+        html += `<th style="padding:8px 10px; text-align:left; border:1px solid #e2e8f0;">${displayName}</th>`;
+    });
+
+    html += `</tr></thead><tbody>`;
+
+    rows.forEach((row, index) => {
+        html += `<tr style="${index % 2 === 0 ? 'background:#fafafa;' : ''}">`;
+
+        colList.forEach(col => {
+            let val = row[col];
+
+            if (val === null || val === undefined) {
+                val = '<span style="color:#94a3b8; font-style:italic;">—</span>';
+            } else if (typeof val === 'string') {
+                if (col.toLowerCase().includes('date')) {
+                    val = formatDate(val) || val;
+                }
+            }
+
+            html += `<td style="padding:8px 10px; border:1px solid #e2e8f0; vertical-align:top;">${val}</td>`;
+        });
+
+        html += `</tr>`;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    const targetDiv = document.getElementById(targetId);
+    if (targetDiv) {
+        if (rows.length === 1) {
+            targetDiv.innerHTML = html;
+        } else {
+            // For multiple results, replace the entire content
+            document.getElementById('trackingResults').innerHTML = html;
+        }
+    }
+}
+
 
 // Make functions globally available
 window.loadTracking = loadTracking;
