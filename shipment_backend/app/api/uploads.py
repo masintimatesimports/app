@@ -73,3 +73,11 @@ def get_available_sheets(agent_id: int):
     except Exception as e:
         print(f"Error getting sheets: {e}")
         return []
+    
+@router.get("/count-all")
+def count_all_uploads():
+    """Count uploads from ALL agents"""
+    res = supabase.table("staging_files") \
+        .select("file_id", count="exact") \
+        .execute()
+    return {"total_count": res.count or 0}    

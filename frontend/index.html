@@ -10,28 +10,75 @@
 <body>
     <div class="app-container">
         <!-- Sidebar Navigation -->
-        <nav class="sidebar">
+        <nav class="sidebar" id="sidebar">
             <div class="logo">
                 <i class="fas fa-ship"></i>
-                <h2>ShipTrack</h2>
+                <h2 class="logo-text">ShipTrack</h2>
+                <button id="sidebar-toggle" class="sidebar-toggle" title="Toggle sidebar">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
             </div>
             <ul class="nav-menu">
-                <li><a href="#dashboard" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a></li>
-                <li><a href="#upload"><i class="fas fa-file-upload"></i> Upload Excel</a></li>
-                <li><a href="#tracking"><i class="fas fa-search"></i> Track Shipments</a></li>
-                <li><a href="#fields"><i class="fas fa-cog"></i> Custom Fields</a></li>
-                <li><a href="#mapping"><i class="fas fa-columns"></i> Column Mapping</a></li>
-                <li><a href="#agents"><i class="fas fa-users-cog"></i> Agent Management</a></li>
+                <li><a href="#dashboard" class="active">
+                    <i class="fas fa-tachometer-alt"></i> 
+                    <span class="nav-text">Dashboard</span>
+                </a></li>
+
+
+                <!-- Dashboard Quick Links Section -->
+
+
+                <li><a href="#dashboard-delivered">
+                    <i class="fas fa-check-circle" style="color:#10b981;"></i> 
+                    <span class="nav-text">Delivered</span>
+                </a></li>
+                <li><a href="#dashboard-pending">
+                    <i class="fas fa-clock" style="color:#f59e0b;"></i> 
+                    <span class="nav-text">Pending</span>
+                </a></li>
+                <li><a href="#dashboard-all" style="opacity: 0.7;">
+                    <i class="fas fa-list"></i> 
+                    <span class="nav-text">All Shipments</span>
+                </a></li>
+                <li><a href="#dashboard-customers" style="opacity: 0.7;">
+                    <i class="fas fa-users"></i> 
+                    <span class="nav-text">Customer View</span>
+                </a></li>
+
+
+                <li><a href="#upload">
+                    <i class="fas fa-file-upload"></i> 
+                    <span class="nav-text">Upload Excel</span>
+                </a></li>
+                <li><a href="#tracking">
+                    <i class="fas fa-search"></i> 
+                    <span class="nav-text">Track Shipments</span>
+                </a></li>
+                <li><a href="#fields">
+                    <i class="fas fa-cog"></i> 
+                    <span class="nav-text">Custom Fields</span>
+                </a></li>
+                <li><a href="#mapping">
+                    <i class="fas fa-columns"></i> 
+                    <span class="nav-text">Column Mapping</span>
+                </a></li>
+                <li><a href="#agents">
+                    <i class="fas fa-users-cog"></i> 
+                    <span class="nav-text">Agent Management</span>
+                </a></li>
             </ul>
             <div class="agent-info">
-
+                <!-- Agent info will go here -->
             </div>
         </nav>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="topbar">
-                <div style="display: flex; align-items: center; gap: 20px;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button id="mobile-menu-toggle" class="mobile-menu-toggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
                     <h1 id="page-title">Dashboard</h1>
                     <div id="role-indicator" style="font-size: 0.9em; color: #64748b;">
                         <!-- Role will be added by JavaScript -->
@@ -65,6 +112,9 @@
     <script src="assets/js/tracking.js"></script>
     <script src="assets/js/fields.js"></script>
     <script src="assets/js/mapping.js"></script>
+    <!-- Add these new dashboard scripts -->
+    <script src="assets/js/dashboards/deliveredDashboard.js"></script>
+    <script src="assets/js/dashboards/pendingDashboard.js"></script>
     
 </body>
 </html>

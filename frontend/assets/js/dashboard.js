@@ -28,9 +28,13 @@ async function loadDashboard() {
                     <p id="total-shipments">0</p>
                 </div>
                 <div class="stat-card">
-                    <i class="fas fa-clock"></i>
-                    <h3>Pending Updates</h3>
-                    <p id="pending-updates">0</p>
+                    <i class="fas fa-tags"></i>
+                    <h3>Shipment Status</h3>
+                    <div id="shipment-status" style="text-align:center; min-height: 60px; display: flex; align-items: center; justify-content: center;">
+                        <div style="color:#64748b;">
+                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
                 </div>
                 <div class="stat-card">
                     <i class="fas fa-file-excel"></i>
@@ -70,8 +74,6 @@ async function loadDashboard() {
     if (isAdmin) {
         await loadAgentDropdown();
     }
-    
-
     
     await loadDashboardStats();
 }
@@ -146,9 +148,8 @@ async function loadDashboardStats() {
         const totalData = await Api.shipments.getTotalCount();
         document.getElementById('total-shipments').textContent = totalData.count || 0;
         
-        // 2. Get pending updates count
-        const pendingData = await Api.shipments.getPendingCount();
-        document.getElementById('pending-updates').textContent = pendingData.count || 0;
+        // 2. Get standardized status counts (EXACTLY what backend returns)
+        await loadShipmentStatus();
         
         // 3. Get Excel files count
         const filesData = await Api.uploads.getCount(agentId);
@@ -176,9 +177,89 @@ async function loadDashboardStats() {
     }
 }
 
+// FUNCTION: Load shipment status in the card - SHOW EXACTLY WHAT BACKEND RETURNS
+async function loadShipmentStatus() {
+    const container = document.getElementById('shipment-status');
+    
+    try {
+        // Get the standardized counts from backend
+        const statusData = await Api.shipments.getStandardizedCounts();
+        
+        // Clear container
+        container.innerHTML = '';
+        
+        if (!statusData || Object.keys(statusData).length === 0) {
+            container.innerHTML = '<div style="color:#64748b;">No status data</div>';
+            return;
+        }
+        
+        // Show EXACTLY what backend returns
+        // If there are many statuses, make it scrollable
+        const entries = Object.entries(statusData);
+        
+        if (entries.length <= 3) {
+            // Few statuses - show as columns
+            let html = '<div style="display: flex; gap: 15px; justify-content: center;">';
+            
+            entries.forEach(([status, count]) => {
+                const statusColor = getStatusColor(status);
+                html += `
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.8em; font-weight: bold; color: ${statusColor}; margin-bottom: 5px;">
+                            ${count}
+                        </div>
+                        <div style="font-size: 0.85em; color: #64748b;">
+                            ${status}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        } else {
+            // Many statuses - show as scrollable list
+            let html = '<div style="max-height: 100px; overflow-y: auto; padding-right: 5px;">';
+            
+            entries.forEach(([status, count]) => {
+                const statusColor = getStatusColor(status);
+                html += `
+                    <div style="display: flex; justify-content: space-between; margin: 5px 0; padding: 3px 0;">
+                        <span style="color:${statusColor}; font-weight:500;">${status}</span>
+                        <span style="font-weight: bold;">${count}</span>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+    } catch (error) {
+        console.error('Error loading shipment status:', error);
+        container.innerHTML = '<div style="color:var(--danger); font-size:0.9em;">Error loading</div>';
+    }
+}
+
+// Helper: Get color based on status
+function getStatusColor(status) {
+    const statusColors = {
+        'DELIVERED': '#10b981',
+        'PENDING': '#f59e0b', 
+        'NULL': '#64748b',
+        'EMPTY': '#64748b',
+        'IN_TRANSIT': '#3b82f6',
+        'PROCESSING': '#8b5cf6',
+        'CLEARED': '#06b6d4',
+        'HOLD': '#ef4444',
+        'ERROR': '#ef4444'
+    };
+    return statusColors[status] || '#8b5cf6';
+}
+
 function showPlaceholderData(message = 'Select agent to view data') {
     document.getElementById('total-shipments').textContent = '--';
-    document.getElementById('pending-updates').textContent = '--';
+    document.getElementById('shipment-status').innerHTML = `<div style="color:#64748b;">${message}</div>`;
     document.getElementById('excel-files').textContent = '--';
     document.getElementById('last-upload').textContent = '--';
     

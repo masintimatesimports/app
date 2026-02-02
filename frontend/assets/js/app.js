@@ -8,10 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboard();
 });
 
-// Navigation
+// Navigation - REMOVE ONE OF THESE setupNavigation() FUNCTIONS
 function setupNavigation() {
     const user = JSON.parse(localStorage.getItem('user'));
     const isAdmin = user && user.role === 'admin';
+    
+    // Setup sidebar toggle FIRST
+    setupSidebarToggle();
     
     // Update topbar with user info
     const welcomeText = document.getElementById('welcome-text');
@@ -54,7 +57,7 @@ function setupNavigation() {
     document.querySelectorAll('.nav-menu a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            const page = e.target.getAttribute('href').substring(1);
+            const page = e.target.closest('a').getAttribute('href').substring(1);
             navigateTo(page);
         });
     });
@@ -71,12 +74,38 @@ function navigateTo(page) {
     });
 
     // Update page title
-    document.getElementById('page-title').textContent = 
-        page.charAt(0).toUpperCase() + page.slice(1);
+    const pageTitles = {
+        'dashboard': 'Dashboard Overview',
+        'dashboard-delivered': 'Delivered Dashboard',
+        'dashboard-pending': 'Pending Dashboard',
+        'upload': 'Upload Excel',
+        'tracking': 'Track Shipments',
+        'fields': 'Custom Fields',
+        'mapping': 'Column Mapping',
+        'agents': 'Agent Management'
+    };
+    
+    document.getElementById('page-title').textContent = pageTitles[page] || page;
 
     // Load page content
     switch(page) {
         case 'dashboard': loadDashboard(); break;
+        case 'dashboard-delivered': 
+            if (typeof loadDeliveredDashboard === 'function') {
+                loadDeliveredDashboard();
+            } else {
+                console.error('Delivered dashboard not loaded');
+                document.getElementById('content-area').innerHTML = 'Error: Delivered dashboard not found';
+            }
+            break;
+        case 'dashboard-pending': 
+            if (typeof loadPendingDashboard === 'function') {
+                loadPendingDashboard();
+            } else {
+                console.error('Pending dashboard not loaded');
+                document.getElementById('content-area').innerHTML = 'Error: Pending dashboard not found';
+            }
+            break;
         case 'upload': loadUpload(); break;
         case 'mapping': loadMapping(); break;
         case 'tracking': loadTracking(); break;
@@ -84,9 +113,6 @@ function navigateTo(page) {
         case 'agents': 
             if (typeof loadAgents === 'function') {
                 loadAgents();
-            } else {
-                console.error('loadAgents function not found');
-                document.getElementById('content-area').innerHTML = 'Error loading agents page';
             }
             break;
         default: loadDashboard();
@@ -123,6 +149,76 @@ function showNotification(message, type = 'info') {
             div.firstChild.remove();
         }
     }, 5000);
+}
+
+function setupSidebarToggle() {
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebar-toggle');
+    const mobileToggle = document.getElementById('mobile-menu-toggle');
+    
+    if (toggleBtn) {
+        const icon = toggleBtn.querySelector('i');
+        
+        // Check localStorage for saved state
+        const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+        
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+            icon.classList.remove('fa-chevron-left');
+            icon.classList.add('fa-chevron-right');
+        }
+        
+        toggleBtn.addEventListener('click', function() {
+            sidebar.classList.toggle('collapsed');
+            
+            // Toggle icon
+            if (sidebar.classList.contains('collapsed')) {
+                icon.classList.remove('fa-chevron-left');
+                icon.classList.add('fa-chevron-right');
+                localStorage.setItem('sidebarCollapsed', 'true');
+            } else {
+                icon.classList.remove('fa-chevron-right');
+                icon.classList.add('fa-chevron-left');
+                localStorage.setItem('sidebarCollapsed', 'false');
+            }
+        });
+    }
+    
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', function() {
+            sidebar.classList.toggle('collapsed');
+        });
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            if (window.innerWidth <= 768 && 
+                !sidebar.contains(event.target) && 
+                !mobileToggle.contains(event.target) &&
+                !event.target.closest('.mobile-menu-toggle')) {
+                sidebar.classList.add('collapsed');
+            }
+        });
+    }
+    
+    // Auto-collapse sidebar on mobile after clicking a link
+    document.querySelectorAll('.nav-menu a').forEach(link => {
+        link.addEventListener('click', function() {
+            if (window.innerWidth <= 768) {
+                sidebar.classList.add('collapsed');
+            }
+        });
+    });
+    
+    // Handle window resize
+    function handleResize() {
+        if (window.innerWidth > 768) {
+            // On desktop, remove mobile collapsed state
+            sidebar.classList.remove('collapsed');
+        }
+    }
+    
+    window.addEventListener('resize', handleResize);
+    handleResize(); // Initial check
 }
 
 // Make functions globally available
