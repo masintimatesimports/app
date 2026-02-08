@@ -182,6 +182,154 @@ def get_vessel_summary():
         print(f"Error getting vessel summary: {e}")
         return []
 
+
+@router.get("/pending-operations")
+def get_pending_operations():
+    """Get pending operations dashboard data"""
+    try:
+        from datetime import datetime
+        
+        # Get all pending shipments
+        response = supabase.table("shipments") \
+            .select("hbl_number, eta, standardized_status, agent_id") \
+            .eq("standardized_status", "PENDING") \
+            .not_.is_("eta", "null") \
+            .execute()
+        
+        if not response.data:
+            return {
+                "summary": {"overdue": 0, "arrived": 0, "en_route": 0, "total": 0},
+                "priority_heatmap": {},
+                "aging_timeline": {}
+            }
+        
+        today = datetime.now().date()
+        summary_counts = {"overdue": 0, "arrived": 0, "en_route": 0}
+        
+        # Store data for categorization
+        overdue_items = []
+        arrived_items = []
+        en_route_items = []
+        
+        for shipment in response.data:
+            try:
+                eta_str = shipment.get('eta')
+                if isinstance(eta_str, str):
+                    eta_date = datetime.fromisoformat(eta_str.replace('Z', '+00:00')).date()
+                elif hasattr(eta_str, 'date'):
+                    eta_date = eta_str.date()
+                else:
+                    continue
+                
+                days_diff = (today - eta_date).days
+                hbl = shipment.get('hbl_number')
+                agent_id = shipment.get('agent_id')
+                
+                # Categorize
+                if days_diff > 0:  # ETA in past (overdue)
+                    summary_counts["overdue"] += 1
+                    overdue_items.append({
+                        "hbl": hbl,
+                        "days_overdue": days_diff,
+                        "agent_id": agent_id
+                    })
+                elif days_diff == 0:  # ETA today (arrived today)
+                    summary_counts["arrived"] += 1
+                    arrived_items.append({
+                        "hbl": hbl,
+                        "days_overdue": 0,
+                        "agent_id": agent_id
+                    })
+                else:  # ETA in future (en route)
+                    summary_counts["en_route"] += 1
+                    en_route_items.append({
+                        "hbl": hbl,
+                        "days_until_eta": abs(days_diff),
+                        "agent_id": agent_id
+                    })
+                    
+            except Exception as e:
+                print(f"Error processing shipment: {e}")
+                continue
+        
+        total = sum(summary_counts.values())
+        
+        # Priority Heatmap Calculation
+        priority_counts = {
+            "critical": {"count": 0, "items": []},
+            "high": {"count": 0, "items": []},
+            "medium": {"count": 0, "items": []},
+            "low": {"count": 0, "items": []}
+        }
+        
+        # Process overdue items for priority
+        for item in overdue_items:
+            days = item["days_overdue"]
+            
+            if days > 7:
+                priority_counts["critical"]["count"] += 1
+                priority_counts["critical"]["items"].append(item)
+            elif days >= 4:
+                priority_counts["high"]["count"] += 1
+                priority_counts["high"]["items"].append(item)
+            elif days >= 1:
+                priority_counts["medium"]["count"] += 1
+                priority_counts["medium"]["items"].append(item)
+            # days = 0 (arrived today) goes to low priority
+        
+        # Add arrived today items to low priority
+        priority_counts["low"]["count"] = summary_counts["arrived"] + summary_counts["en_route"]
+        priority_counts["low"]["items"] = arrived_items + en_route_items
+        
+        # Get sample items (max 3 per category)
+        for category in priority_counts:
+            items = priority_counts[category]["items"]
+            priority_counts[category]["sample"] = items[:3] if len(items) > 3 else items
+        
+        # Aging Timeline Calculation
+        aging_timeline = {
+            "0_3": 0,    # 0-3 days overdue
+            "4_7": 0,    # 4-7 days overdue
+            "8_14": 0,   # 8-14 days overdue
+            "15_30": 0,  # 15-30 days overdue
+            "30_plus": 0 # 30+ days overdue
+        }
+        
+        for item in overdue_items:
+            days = item["days_overdue"]
+            if days <= 3:
+                aging_timeline["0_3"] += 1
+            elif days <= 7:
+                aging_timeline["4_7"] += 1
+            elif days <= 14:
+                aging_timeline["8_14"] += 1
+            elif days <= 30:
+                aging_timeline["15_30"] += 1
+            else:
+                aging_timeline["30_plus"] += 1
+        
+        # Agent distribution
+        agent_counts = {}
+        all_items = overdue_items + arrived_items + en_route_items
+        for item in all_items:
+            agent_id = item.get("agent_id")
+            if agent_id:
+                agent_counts[agent_id] = agent_counts.get(agent_id, 0) + 1
+        
+        return {
+            "summary": {
+                **summary_counts,
+                "total": total
+            },
+            "priority_heatmap": priority_counts,
+            "aging_timeline": aging_timeline,
+            "agent_distribution": agent_counts
+        }
+        
+    except Exception as e:
+        print(f"Error in pending-operations: {e}")
+        return {"error": str(e)}
+
 # 2. PARAMETERIZED/CATCH-ALL ENDPOINTS LAST (KEEP THESE AT THE BOTTOM)
 @router.get("/{hbl}")
 def get_shipment_by_hbl(

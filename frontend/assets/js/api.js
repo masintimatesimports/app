@@ -79,7 +79,7 @@
             getTotalCount: () => this.fetchJson('/shipments/total-count'),
             getPendingCount: () => this.fetchJson('/shipments/pending-count'),
             getStandardizedCounts: () => this.fetchJson('/shipments/standardized-counts'),
-            
+            // In api.js, add to shipments object:
             getRecent: (agentId, limit = 6) => 
                 this.fetchJson(`/shipments/recent?agent_id=${agentId}&limit=${limit}`),
             
@@ -106,7 +106,9 @@
             
             searchByHbl: (hbl, agentId) => 
                 this.fetchJson(`/shipments/search?hbl=${encodeURIComponent(hbl)}&agent_id=${agentId}`),
-            getVesselSummary: () => this.fetchJson('/shipments/vessel-summary')
+            getVesselSummary: () => this.fetchJson('/shipments/vessel-summary'),
+            getPendingOperations: () => this.fetchJson('/shipments/pending-operations'),
+
 
         };
 
